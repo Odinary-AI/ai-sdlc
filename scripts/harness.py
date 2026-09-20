@@ -15,9 +15,13 @@ import tempfile
 import time
 import uuid
 import fcntl
+import importlib.util
 
-VERSION = '0.5.1-dev.1'
+VERSION = '0.6.0-dev.1'
 PACKAGE = Path(__file__).resolve().parents[1]
+_scan_spec = importlib.util.spec_from_file_location('ai_sdlc_scan_coverage', PACKAGE/'scripts/scan_coverage.py')
+scan_coverage = importlib.util.module_from_spec(_scan_spec)
+_scan_spec.loader.exec_module(scan_coverage)
 DEFAULTS = {'entrypoint': 'README.md', 'agent_policy': 'AGENTS.md',
             'requirements': 'docs/requirements.md', 'validation': 'TESTING.md',
             'status': 'docs/status.md'}
@@ -50,7 +54,11 @@ def safe(root, relative):
     p = Path(relative)
     require(not p.is_absolute() and '..' not in p.parts, f'路径超出项目: {relative}')
     target = root / p
-    require(target.resolve().is_relative_to(root), f'符号链接超出项目: {relative}')
+    try:
+        resolved = target.resolve()
+    except RuntimeError as exc:
+        raise HarnessError(f'路径无法解析: {relative}: {exc}') from exc
+    require(resolved.is_relative_to(root), f'符号链接超出项目: {relative}')
     return target
 
 def atomic(path, content):
@@ -473,6 +481,29 @@ def begin(root, c, spec):
         write_task(root, c, t, '# ' + t['id'] + '\n\n```harness-task\n{}\n```\n\n## 执行事实与决定\n\n任务建立。实施后在此记录实际差异、决定及后续事项。\n')
     return t
 
+def input_files(root, directory):
+    """Follow project-local directory aliases without silently losing dependencies."""
+    files, pending = [], [(directory, frozenset())]
+    while pending:
+        current, ancestors = pending.pop()
+        try:
+            resolved = safe(root, str(current.relative_to(root))).resolve()
+        except (RuntimeError, OSError) as exc:
+            raise HarnessError(f'输入目录无法解析: {current.relative_to(root)}: {exc}') from exc
+        require(resolved not in ancestors, f'输入目录存在符号链接循环: {current.relative_to(root)}')
+        lineage = ancestors | {resolved}
+        for child in current.iterdir():
+            if child.name in ('__pycache__', '.DS_Store'):
+                continue
+            safe(root, str(child.relative_to(root)))
+            require(child.exists(), f'相关输入缺失或链接失效: {child.relative_to(root)}')
+            if child.is_dir():
+                pending.append((child, lineage))
+            elif child.is_file():
+                files.append(child)
+    return sorted(files)
+
+
 def fingerprints(root, c, t, cid):
     chk = c['checks'][cid]
     paths = set(chk['inputs']) | {c['authorities'][k] for k in ('requirements', 'validation', 'agent_policy')}
@@ -481,7 +512,7 @@ def fingerprints(root, c, t, cid):
         p = safe(root, rel)
         require(p.exists(), f'相关输入缺失: {rel}')
         if p.is_dir():
-            members = sorted(x for x in p.rglob('*') if x.is_file() and '__pycache__' not in x.parts and x.name != '.DS_Store')
+            members = input_files(root, p)
             files[rel + '/'] = [str(x.relative_to(root)) for x in members]
         else:
             members = [p]
@@ -490,9 +521,14 @@ def fingerprints(root, c, t, cid):
             files[str(x.relative_to(root))] = digest(x.read_bytes())
     environment = {'python': sys.version, 'platform': sys.platform}
     environment.update({k: digest(os.environ.get(k)) for k in chk.get('environment', [])})
-    return {'files': files, 'environment': environment, 'check': digest(chk),
+    result = {'files': files, 'environment': environment, 'check': digest(chk),
             'contract': digest(contract(t)), 'confirmation': digest(c.get('confirmation_source')),
             'runner': digest(Path(__file__).read_bytes())}
+    scan = scan_coverage.evaluate(root, task_path(root, t['id']))
+    if scan['present']:
+        result['scan'] = scan['fingerprint']
+        result['scan_runner'] = digest((PACKAGE/'scripts/scan_coverage.py').read_bytes())
+    return result
 
 def seal(root, run, rec):
     write_json(safe(root, run + '/summary.json'), rec)
@@ -617,7 +653,7 @@ def fingerprint_changes(before, after):
                 kind = 'directory' if group == 'files' and name.endswith('/') else ('file' if group == 'files' else 'environment')
                 changes.append({'kind': kind, 'name': name,
                                 'change': 'added' if name not in old else 'removed' if name not in new else 'modified'})
-    for name in ('check', 'contract', 'confirmation', 'runner'):
+    for name in ('check', 'contract', 'confirmation', 'runner', 'scan', 'scan_runner'):
         if before.get(name) != after.get(name):
             changes.append({'kind': name, 'name': name, 'change': 'modified'})
     return changes
@@ -686,6 +722,10 @@ def assess(root, c, t):
     gaps = list(doctor(root, c, task_check_ids(t))['gaps'])
     rgaps, materials = record_gaps(root, t)
     gaps.extend(rgaps)
+    scan = scan_coverage.evaluate(root, task_path(root, t['id']))
+    gaps.extend('扫描覆盖: ' + gap for gap in scan['gaps'])
+    if scan['present']:
+        materials['harness-scan'] = digest(scan['fingerprint'])
     if t['schema_version'] == 2 and t.get('state') == 'completed' and not t.get('review_source'):
         gaps.append('已完成任务缺审阅材料')
     if t['schema_version'] == 2 and t.get('review_source'):
@@ -806,7 +846,8 @@ def readable_assessment(assessment):
                 'unknown': '无法判定', 'unverified': '未验证'}
     humans = {'not_required': '不要求', 'pending': '待确认或需重新确认', 'recorded': '已记录确认（未核实来源真实性）'}
     kinds = {'file': '文件', 'directory': '目录清单', 'environment': '环境', 'check': '检查定义',
-             'contract': '任务标准', 'confirmation': '授权来源', 'runner': '执行器', 'fingerprint': '输入指纹'}
+             'contract': '任务标准', 'confirmation': '授权来源', 'runner': '执行器', 'fingerprint': '输入指纹',
+             'scan': '扫描覆盖与引用', 'scan_runner': '扫描校验器'}
     changes = {'added': '新增', 'removed': '移除', 'modified': '变化', 'unavailable': '无法比较'}
     lines = ['交付机械条件：' + ('已满足' if assessment['conditions_met'] else '有缺口')]
     lines.extend('共同缺口：' + gap for gap in assessment['global_gaps'])

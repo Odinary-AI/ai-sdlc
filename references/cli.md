@@ -18,6 +18,28 @@ Python 3.10+，macOS/Linux，标准库。以下 `H` 表示本 Skill 的 `scripts
 | `python3 H --root PROJECT close TASK-001 --format text` | 用中文展示同一验收、检查和证据判定；仍保存交付回执 |
 | `python3 H --root PROJECT close TASK-001 --complete --review-source docs/review.md` | 引用真实语义审阅，条件满足时完成，否则阻塞并列缺口 |
 
+## 扫描覆盖记录
+
+脚本模式的新正式健康扫描在对应TASK正文保留唯一 `harness-scan` JSON块，独立 `schema_version=1`；任务仍使用v2，无需迁移普通或历史任务。完整调查内容可引用附件，不重复覆盖表。格式只记录结果，不规定工具、实现方法和调查顺序。
+
+| 字段 | 内容 |
+|---|---|
+| scope | 真实检查范围和排除边界 |
+| level | full（完整阶段/全项目约定范围）或local（局部专项） |
+| claim | scan_complete（调查完成）、healthy（范围内健康通过）、partial（部分结果，任务仍未完成） |
+| selection | 以TR/DC/DS/CH/VH/ER/UX/SC为键，每项含applicable布尔值及reason。full必须判断全部八类且前五类适用；local按影响选择并说明理由 |
+| items | 以现行条目ID为键，覆盖全部选中适用专项。每项含coverage（具体对象与覆盖方式）及status：ok/finding/not_applicable/incomplete |
+| 条目证据与处置 | ok/finding需evidence：项目内非空文件的相对路径数组；not_applicable需reason事实依据；incomplete需reason与next_action。finding还需findings发现ID数组 |
+| findings | 以发现ID为键，每项含summary事实与影响、priority（blocking/required/optional）、status（open/resolved）。open需owner及next_action；resolved需resolution_evidence复验证据路径数组 |
+
+项目已有或新增附加检查可在items中使用自己的ID，注明 `additional: true` 及 `basis`（项目依据或新增检查理由），其余状态、证据和发现字段相同。附加项不能抵消共同条目缺失，也不能把未选专项的现行共同ID改称附加项；不限制项目自选检查方法。not_applicable如另有evidence引用，也核对这些文件。
+
+读取当前ID用 `python3 /实际位置/ai-sdlc/scripts/scan_coverage.py --catalog`。只读预检用 `python3 /实际位置/ai-sdlc/scripts/scan_coverage.py --root PROJECT docs/tasks/TASK-001.md`；0表示声明的结构条件满足、1表示覆盖/结论缺口、2表示调用或文件错误。不提供预填“通过”的模板；证据引用不能指向本任务自身，需指向实际源码、规则、附件或原始执行记录。多个条目可共用同一附件；外部观察先保存项目内可核对材料。
+
+resume、close及Stop的共同assess会检查存在的覆盖块；缺条目、坏引用、未完成项阻止完成。scan_complete允许有已记录归属的未修复发现；healthy还要求blocking/required发现解决且有复验证据，optional可保留。not_applicable理由是否成立、证据充分性、调查与授权真实性仍由AI/人核对，不通过词语黑名单代替语义判断。
+
+扫描内容、所选专项正文、引用文件及校验器参与该任务RUN指纹；状态/时间写回不使覆盖内容自我失效。引用其他会随验证自动写回的状态文件可能造成保守失效，优先引用稳定的原始证据。先完成覆盖记录，再运行任务选择的验证；后续有相关变化只重验受影响范围。没有覆盖块的任务保持原接口，省略整个块不被自动识别；项目规则及交付审阅仍负责确认是否需扫描。
+
 ## 项目配置
 
 接入映射示例；argv、输入和确认来源必须换成项目实际内容。所有路径相对 PROJECT，检查命令的 cwd 是 PROJECT。`authorities` 保留历史机器字段名，其含义是规则/入口路径映射，不是额外批准机构。
@@ -56,6 +78,8 @@ status不能与requirements、validation或agent_policy映射到同一实际文�
 ```
 
 计数来自实际测试框架。零测试、任何必需测试跳过、缺报告不通过。`kind=probe` 用于非测试的真实检查命令，以退出码和日志为证；不可用于绕过测试报告要求。验证命令直接执行 argv，不经过 shell；需 shell 的项目显式配置 shell 程序，并审阅副作用。
+
+目录输入递归包含指向项目内目录的符号链接及其文件；链接目标内容和文件增删都参与原有输入指纹。越界、失效或循环链接报告缺口，不静默漏掉依赖；本地目录和多个合法别名仍可使用。不把这项路径检查当作对恶意并发改写文件系统的沙箱隔离。
 
 ## 任务编号与文件命名
 
