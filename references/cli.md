@@ -158,6 +158,31 @@ close --complete 的 review-source 在v2必须为项目内非空审阅材料，�
 
 `python3 H --root PROJECT migrate-task TASK` 预览旧v1任务；加 --apply 保存原件及散列再升级。未知版本拒绝；v1可只读resume及legacy close，继续verify/activate/pause前需迁移。旧RUN不修改，升级后的当前证据重新核对。TASK源JSON仅为创建历史，别当作当前状态。
 
+### 已有人工确认的记录示例
+
+仅当人已真实确认且确认适用于当前任务标准时记录。`resume` 的 JSON 输出同时提供 `task` 和 `assessment.contract`；`close` 的 JSON 输出也提供顶层 `contract`，无需调用方重算散列。下面的 `result` 是本次 `resume` JSON 对象，`actual_source` 是已核对的真实确认来源，`AC-01` 替换为对应验收ID：
+
+```python
+task = result["task"]
+task["human_acceptance"]["AC-01"] = {
+    "status": "accepted",
+    "source": actual_source,
+    "contract": result["assessment"]["contract"],
+}
+```
+
+将完整 `task` 保存为临时 `snapshot.json`，再执行 `update TASK-001 --spec snapshot.json`。不只提交上面的字段片段。尚未确认时保留待确认；已有指纹不匹配时先核对确认所覆盖的标准及实际变化，必要时重新确认，不能直接换成新指纹求通过。此记录不代替语义审阅，`human_items` 只提供待人问题与材料，不是已确认结果。
+
+### 收尾失败后的恢复示例
+
+`close` 默认只核对并保存回执；`close --complete` 因交付缺口失败才将任务置为 `blocked`。参数或材料错误不表示已改变任务状态，以重新读取的记录为准。
+
+需要修改记录时，先 `resume TASK-001`，在当前 `task` 上应用修改，保留其 `state` 和 `updated_at` 后 `update`；`blocked` 本身不阻止内容更新。若接着需要运行验证，核对现场后执行 `resume TASK-001 --activate`，再 `verify TASK-001 CHECK_ID`，其中检查ID取自本任务验收。已有证据仍有效且只补齐记录时，不因收尾失败自动重跑检查。
+
+重新交付时可用 `close TASK-001 --complete --review-source docs/tasks/TASK-001.md`；路径必须对应真实非空审阅内容，也可换为项目内独立审阅文件。会话原话不能直接用作该路径，人工验收来源与差异审阅材料是不同职责。
+
+`update` 报快照过期时，重新读取并基于当前内容应用修改，不只替换时间戳。`verify` 保存独立RUN，不改写任务记录；`update`、`pause`、`resume --activate` 和 `close --complete` 等任务写入会更新记录。以上是按需要选取的操作示例，不要求每次任务执行固定命令序列。
+
 ## 历史在途执行处置
 
 仅对留在 running 的 RUN 使用 reconcile-run；先核对实际进程、请求身份、目标状态及副作用结局，不能凭旧 PID、新一次成功或正文声明自动认定已结束。--outcome finished / stopped 表示已核对执行结束 / 停止；结局未知不调用解除。--source 指向包含核对事实的项目内材料，可用当前任务正文，不能用状态派生文件。

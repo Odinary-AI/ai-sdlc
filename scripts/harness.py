@@ -17,7 +17,7 @@ import uuid
 import fcntl
 import importlib.util
 
-VERSION = '0.6.0-dev.2'
+VERSION = '0.6.0-dev.3'
 PACKAGE = Path(__file__).resolve().parents[1]
 _scan_spec = importlib.util.spec_from_file_location('ai_sdlc_scan_coverage', PACKAGE/'scripts/scan_coverage.py')
 scan_coverage = importlib.util.module_from_spec(_scan_spec)
@@ -343,9 +343,12 @@ def update_task(root, c, tid, candidate):
     with lock(root):
         t, body = read_task(root, tid)
         require(t['schema_version'] == 2, '旧任务先 migrate-task')
-        require(candidate.get('updated_at') == t['updated_at'], '任务已变化，请重新读取')
+        require(candidate.get('updated_at') == t['updated_at'],
+                f'任务已变化，请重新读取；运行 resume {tid} 取得当前 task，基于它重新应用本次修改后 update，不只替换 updated_at')
         for key in ('id','schema_version','state','created_at','migration','review_source','review_sha256','review_kind','review_record_sha256'):
-            require(candidate.get(key) == t.get(key), f'不能通过 update 改变 {key}')
+            guidance = (f'保留当前 state 可更新内容（包括 blocked）；需继续执行验证时，核对现场后运行 resume {tid} --activate'
+                        if key == 'state' else '重新读取当前 task，保留该管理字段，仅应用本次内容修改')
+            require(candidate.get(key) == t.get(key), f'不能通过 update 改变 {key}；{guidance}')
         validate_task(candidate, c)
         write_task(root, c, candidate, body)
         return candidate
@@ -565,7 +568,8 @@ def verify(root, c, tid, cid):
     t, _ = read_task(root, tid)
     validate_task(t, c)
     require(t['schema_version'] == 2, '旧任务继续执行前须 migrate-task')
-    require(t['state'] == 'in_progress', '任务须为进行中；暂停或结束后先显式恢复并核对范围')
+    require(t['state'] == 'in_progress',
+            f'任务须为进行中；暂停或结束后先显式恢复并核对范围；核对现场后运行 resume {tid} --activate，再执行 verify')
     require(cid in {x for ac in t['acceptance'] for x in ac['checks']}, '检查不在当前任务验收范围')
     chk = c['checks'][cid]
     initial = fingerprints(root, c, t, cid)
@@ -779,7 +783,14 @@ def assess(root, c, t):
             h = t.get('human_acceptance', {}).get(ac['id'], {})
             if h.get('status') != 'accepted' or not h.get('source') or h.get('contract') != digest(contract(t)):
                 human_status = 'pending'
-                gaps.append(f'{ac["id"]}: 必需人工验收未确认、无来源或范围已改变')
+                reasons = []
+                if h.get('status') != 'accepted': reasons.append('未记录 status=accepted，须先取得真实人工确认')
+                if not h.get('source'): reasons.append('缺少 source，须记录真实确认来源')
+                if not h.get('contract'):
+                    reasons.append('缺少 contract；确认适用于当前范围后，使用 JSON close.contract 或 resume.assessment.contract 记录指纹')
+                elif h.get('contract') != digest(contract(t)):
+                    reasons.append('contract 与当前任务标准不匹配；先核对原确认是否适用，必要时重新确认，不直接替换指纹')
+                gaps.append(f'{ac["id"]}: 必需人工验收未确认、无来源或范围已改变；' + '；'.join(reasons))
             else:
                 human_status = 'recorded'
         met = not global_gaps and human_status != 'pending' and all(check_results[cid]['conditions_met'] for cid in ac['checks'])
@@ -801,14 +812,19 @@ def close(root, c, tid, complete=False, review_source=None):
             assessed['state'] = 'in_progress'
         result = assess(root, c, assessed)
         if complete:
-            nonempty(review_source, '真实差异及语义审阅来源')
-            if t['schema_version'] == 2:
-                require(safe(root, review_source).resolve() != safe(root, c['authorities']['status']).resolve(), '状态摘要不能作为审阅材料；请引用任务正文或独立审阅文件')
-                review_kind = source_kind(root, review_source, tid)
-                result['review_sha256'] = material_digest(root, review_source, tid, review_kind)
+            try:
+                nonempty(review_source, '真实差异及语义审阅来源')
+                if t['schema_version'] == 2:
+                    require(safe(root, review_source).resolve() != safe(root, c['authorities']['status']).resolve(), '状态摘要不能作为审阅材料；请引用任务正文或独立审阅文件')
+                    review_kind = source_kind(root, review_source, tid)
+                    result['review_sha256'] = material_digest(root, review_source, tid, review_kind)
+            except HarnessError as exc:
+                raise HarnessError(f'{exc}；--review-source 须为项目内已有的非空审阅文件路径，可引用任务正文；不能直接填写会话原话') from exc
             if not result['conditions_met']:
                 t['state'] = 'blocked'
-                t['next_action'] = '处理交付缺口：' + '; '.join(result['gaps'])
+                recovery = f'blocked 状态可直接更新内容；需执行 verify 时，先核对现场并运行 resume {tid} --activate'
+                t['next_action'] = '处理交付缺口：' + '; '.join(result['gaps']) + '；' + recovery
+                result['boundary'] += ' ' + recovery
             else:
                 t['state'] = 'completed'
                 t['next_action'] = '当前工程任务已完成；后续工作按新授权建立任务。'
@@ -854,6 +870,8 @@ def readable_assessment(assessment):
     for ac in assessment['acceptance_results']:
         lines.append(f'验收 {ac["id"]}：{ac["text"]}；检查：{", ".join(ac["checks"]) or "仅人工"}；'
                      f'机械条件：{"满足" if ac["conditions_met"] else "有缺口"}；人工：{humans[ac["human_status"]]}')
+        if ac['human_status'] == 'pending':
+            lines.extend('  原因：' + gap for gap in assessment['gaps'] if gap.startswith(ac['id'] + ':'))
     for cid, item in assessment['check_results'].items():
         lines.append(f'检查 {cid}：执行{execution.get(item["execution_status"], "未知")}；'
                      f'证据{evidence[item["evidence_status"]]}；RUN：{item["run_id"] or "无"}')
@@ -897,7 +915,7 @@ def main(argv=None):
     sub.add_parser('doctor', help='检查接入、配置、真实内容与引用')
     p = sub.add_parser('begin', help='从 JSON 规格建立唯一任务记录'); p.add_argument('--spec', required=True)
     p = sub.add_parser('verify', help='实际执行项目配置的检查并保存独立 RUN'); p.add_argument('task'); p.add_argument('check')
-    p = sub.add_parser('close', help='重新核对交付条件；可据实标记完成'); p.add_argument('task'); p.add_argument('--complete', action='store_true'); p.add_argument('--review-source')
+    p = sub.add_parser('close', help='重新核对交付条件；可据实标记完成'); p.add_argument('task'); p.add_argument('--complete', action='store_true'); p.add_argument('--review-source', help='项目内已有的非空审阅文件路径，可引用任务正文；不是会话原话')
     p.add_argument('--format', choices=['json','text'], default='json', help='文本验收视图或完整 JSON；不改变判定与命令副作用')
     p = sub.add_parser('pause', help='保存中断状态及下一动作'); p.add_argument('task'); p.add_argument('--next', required=True)
     p = sub.add_parser('resume', help='读取任务、证据与下一动作'); p.add_argument('task'); p.add_argument('--activate', action='store_true')
