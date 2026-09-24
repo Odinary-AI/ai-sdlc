@@ -17,7 +17,7 @@ import uuid
 import fcntl
 import importlib.util
 
-VERSION = '0.6.0-dev.3'
+VERSION = '0.6.1-dev'
 PACKAGE = Path(__file__).resolve().parents[1]
 _scan_spec = importlib.util.spec_from_file_location('ai_sdlc_scan_coverage', PACKAGE/'scripts/scan_coverage.py')
 scan_coverage = importlib.util.module_from_spec(_scan_spec)
@@ -85,8 +85,9 @@ def lock(root):
         fcntl.flock(f, fcntl.LOCK_EX)
         yield
 
-def identifier(value):
-    require(isinstance(value, str) and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,80}', value), 'ID 只允许字母、数字、横线及下划线')
+def identifier(value, label='ID'):
+    require(value is not None, f'{label} 缺失')
+    require(isinstance(value, str) and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,80}', value), f'{label} 只允许字母、数字、横线及下划线')
     return value
 
 def nonempty(value, label):
@@ -97,9 +98,10 @@ def task_check_ids(t):
     acs = t.get('acceptance')
     require(isinstance(acs, list) and acs, '必须有验收标准')
     ids = set()
-    for ac in acs:
-        require(isinstance(ac, dict) and isinstance(ac.get('checks'), list), '验收检查须为数组')
-        ids.update(identifier(cid) for cid in ac['checks'])
+    for i, ac in enumerate(acs):
+        require(isinstance(ac, dict), f'acceptance[{i}] 应为对象')
+        require(isinstance(ac.get('checks'), list), f'acceptance[{i}].checks 缺失或不是数组')
+        ids.update(identifier(cid, f'acceptance[{i}].checks[]') for cid in ac['checks'])
     return ids
 
 def config(root, check_ids=None):
@@ -338,6 +340,68 @@ def migrate_task(root, c, tid, apply=False):
             result.update(applied=True, backup=backup)
         return result
 
+def task_structure_errors(t):
+    """Reject malformed new v2 items while leaving unfinished drafts writable."""
+    errors = []
+    def field(item, key, label, kind):
+        if key not in item:
+            errors.append(f'{label}.{key} 缺失')
+        elif not isinstance(item[key], kind):
+            errors.append(f'{label}.{key} 类型无效')
+    def item_id(item, label):
+        try:
+            return identifier(item.get('id'), f'{label}.id')
+        except HarnessError as exc:
+            errors.append(str(exc))
+            return None
+    decision_ids = set()
+    for i, item in enumerate(t['decisions']):
+        label = f'decisions[{i}]'
+        did = item_id(item, label)
+        if did in decision_ids:
+            errors.append(f'{label}.id 重复: {did}')
+        if did is not None:
+            decision_ids.add(did)
+        field(item, 'kind', label, str)
+        if isinstance(item.get('kind'), str) and item['kind'] not in ('confirmed', 'authorized', 'candidate', 'rejected', 'observation'):
+            errors.append(f'{label}.kind 分类无效')
+        for key in ('source', 'summary'):
+            field(item, key, label, str)
+        if item.get('rule_ref') is not None and not isinstance(item['rule_ref'], str):
+            errors.append(f'{label}.rule_ref 须为路径字符串或 null')
+    sync = t['document_sync']
+    if 'reviewed' in sync and type(sync['reviewed']) is not bool:
+        errors.append('document_sync.reviewed 须为布尔值')
+    if 'no_change_reason' in sync and not isinstance(sync['no_change_reason'], str):
+        errors.append('document_sync.no_change_reason 须为字符串')
+    items = sync.get('items', [])
+    if not isinstance(items, list):
+        errors.append('document_sync.items 须为数组')
+    else:
+        sync_ids = set()
+        for i, item in enumerate(items):
+            label = f'document_sync.items[{i}]'
+            if not isinstance(item, dict):
+                errors.append(f'{label} 应为对象')
+                continue
+            sid = item_id(item, label)
+            if sid in sync_ids:
+                errors.append(f'{label}.id 重复: {sid}')
+            if sid is not None:
+                sync_ids.add(sid)
+            field(item, 'decision_ids', label, list)
+            if isinstance(item.get('decision_ids'), list):
+                for j, decision_id in enumerate(item['decision_ids']):
+                    try:
+                        identifier(decision_id, f'{label}.decision_ids[{j}]')
+                    except HarnessError as exc:
+                        errors.append(str(exc))
+            for key in ('path', 'status', 'reason'):
+                field(item, key, label, str)
+            if isinstance(item.get('status'), str) and item['status'] not in ('pending', 'updated', 'not_needed'):
+                errors.append(f'{label}.status 须为 pending、updated 或 not_needed')
+    return errors
+
 def update_task(root, c, tid, candidate):
     require(isinstance(candidate, dict), '任务更新快照必须是 JSON 对象')
     with lock(root):
@@ -350,6 +414,8 @@ def update_task(root, c, tid, candidate):
                         if key == 'state' else '重新读取当前 task，保留该管理字段，仅应用本次内容修改')
             require(candidate.get(key) == t.get(key), f'不能通过 update 改变 {key}；{guidance}')
         validate_task(candidate, c)
+        errors = task_structure_errors(candidate)
+        require(not errors, '任务结构无效: ' + '；'.join(errors))
         write_task(root, c, candidate, body)
         return candidate
 
@@ -436,13 +502,15 @@ def validate_task(t, c):
     acs = t.get('acceptance')
     require(isinstance(acs, list) and acs, '必须有验收标准')
     seen = set()
-    for ac in acs:
-        identifier(ac.get('id'))
+    for i, ac in enumerate(acs):
+        require(isinstance(ac, dict), f'acceptance[{i}] 应为对象')
+        identifier(ac.get('id'), f'acceptance[{i}].id')
         require(ac['id'] not in seen, '验收标准 ID 重复')
         seen.add(ac['id'])
         nonempty(ac.get('text'), '验收标准')
         checks = ac.get('checks')
-        require(isinstance(checks, list) and checks and len(set(checks)) == len(checks), '每项标准必须关联不重复的检查；人工材料也需检查存在')
+        require(isinstance(checks, list) and checks, f'acceptance[{i}].checks 必须为非空检查数组；人工材料也需检查存在')
+        require(all(isinstance(x, str) for x in checks) and len(set(checks)) == len(checks), f'acceptance[{i}].checks 须为不重复的检查ID数组')
         require(all(x in c['checks'] for x in checks), '验收标准引用未知检查')
         require(type(ac.get('human_required', False)) is bool, 'human_required 必须为布尔值')
 
@@ -473,11 +541,13 @@ def write_task(root, c, t, body):
 def begin(root, c, spec):
     require(isinstance(spec, dict), '任务规格必须是 JSON 对象')
     t = dict(spec)
-    identifier(t.get('id'))
+    identifier(t.get('id'), 'id')
     require(spec.get('schema_version', 2) == 2, '新建任务使用 schema_version=2；旧任务显式迁移')
     t.update(schema_version=2, state='in_progress', created_at=now(), human_acceptance={})
     v2_defaults(t)
     validate_task(t, c)
+    errors = task_structure_errors(t)
+    require(not errors, '任务结构无效: ' + '；'.join(errors))
     require(doctor(root, c, task_check_ids(t))['ready'], '任务前置未就绪；核对共同规则及所选检查缺口')
     with lock(root):
         require(not task_path(root, t['id']).exists(), '任务已存在；使用 resume，不覆盖')
@@ -708,6 +778,15 @@ def assess_check(root, c, t, cid, directory, rec):
             require(digest((directory/'test-report.json').read_bytes()) == rec.get('report_sha256'), '测试计数报告损坏')
     except (HarnessError, OSError) as exc:
         gap = str(exc)
+        if stage == 'inputs' and changes and gap == '相关输入变化，证据已失效':
+            labels = {'file': '文件', 'directory': '目录', 'environment': '环境',
+                      'check': '检查定义', 'contract': '任务标准', 'confirmation': '授权来源',
+                      'runner': '执行器', 'scan': '扫描覆盖', 'scan_runner': '扫描校验器',
+                      'fingerprint': '输入指纹'}
+            shown = '、'.join(f'{labels[x["kind"]]} {x["name"]}' for x in changes[:5])
+            gap += f'；变化：{shown}'
+            if len(changes) > 5:
+                gap += f' 等{len(changes)}项（完整清单见 diagnostics）'
         if stage in ('log', 'report', 'counts'):
             result['evidence_status'] = 'invalid'
             explain('invalid_' + stage, gap, '核对该 RUN 原始日志与报告，保留损坏记录；重新取得有效证据。')

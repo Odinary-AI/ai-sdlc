@@ -119,7 +119,7 @@ doctor 的 ready 仅表示文件、配置和 README 导航检查就绪；接入�
 `resume` 的 assessment 和 `close` 结果保留原有 conditions_met、gaps、runs 等字段，额外提供以下派生信息；不新增任务必填字段：
 
 - `check_results`：按检查 ID 索引，含 run_id、execution_status、evidence_status、conditions_met、log 与 diagnostics。执行成功与证据仍有效分开；未执行、失败、在途、输入失效和损坏分别说明。log 是项目内日志路径，失败细节结合该 RUN 的 summary.json 与原始日志读取。
-- `diagnostics` 中每项含 code、message、action，输入变化时另含 changes（kind、name、change）。按文件/目录、环境、检查定义、任务标准、授权来源和执行器定位；只显示环境变量名和变化，不输出变量值或其散列。旧 RUN 仅存检查定义整体摘要，因此该类差异只能定位到检查定义，不能追溯具体配置字段。执行结束时已检测到前后指纹不同并记为失效的 RUN，即使输入之后恢复，仍说明该 RUN 失效。执行期间改变但结束前恢复的输入无法由两次快照识别，执行器不提供持续变化监测。
+- `diagnostics` 中每项含 code、message、action，输入变化时另含 changes（kind、name、change）。首层 gaps 同时列出最多五项变化的类别与名称；完整清单在 diagnostics。只显示环境变量名和变化，不输出变量值或其散列。旧 RUN 仅存检查定义整体摘要，因此该类差异只能定位到检查定义，不能追溯具体配置字段。执行结束时已检测到前后指纹不同并记为失效的 RUN，即使输入之后恢复，仍说明该 RUN 失效。执行期间改变但结束前恢复的输入无法由两次快照识别，执行器不提供持续变化监测。
 - `acceptance_results`：按验收项展示 id、text、checks、human_status 与 conditions_met。人工状态 recorded 仅表示来源及标准指纹已记录，不证明确认真实；共同缺口存在时各项机械条件仍未满足。映射齐全不能证明测试语义充分。
 - `global_gaps`：共同前置、历史无效/在途回执及审阅材料等缺口。存在无效回执时 runs 可能仍列可读取的旧 RUN，但不能据此当作最新通过，整体与验收项仍受共同缺口阻塞。
 
@@ -143,7 +143,7 @@ purpose.user_outcome 未提供时复用 goal；显式空白或坏值仍是草稿
 {"document_sync":{"reviewed":true,"no_change_reason":"本次修复恢复既有规则，规则正文不变","items":[]}}
 ```
 
-这只是字段片段；update 需要完整任务快照。先从 resume 的 task 字段取得完整对象，修改后保存到临时 JSON，再运行 `python3 H --root PROJECT update TASK --spec snapshot.json`；保留 updated_at，防止覆盖其他执行者新内容。不能由 update 改 id、schema、状态、创建时间、迁移与完成审阅字段。人工确认只能按真实来源维护。
+这只是字段片段；update 需要完整任务快照。先从 resume 的 task 字段取得完整对象，修改后保存到临时 JSON，再运行 `python3 H --root PROJECT update TASK --spec snapshot.json`；保留 updated_at，防止覆盖其他执行者新内容。不能由 update 改 id、schema、状态、创建时间、迁移与完成审阅字段。`begin/update` 在写入前汇总 decisions 与 document_sync.items 已填写条目的结构错误并给出字段路径；待处置的合法草稿仍可保存，完成条件由 close 核对。历史记录继续通过 resume/close 报缺口，不因新增写入校验自动改写。人工确认只能按真实来源维护。
 
 - decisions：每项 id、kind（confirmed/authorized/candidate/rejected/observation）、source、summary、rule_ref。已确认或授权内改变规则且有 rule_ref 时，关联同步处置；候选不能当正式依据。
 - document_sync：reviewed、no_change_reason、items。items 每项 id、decision_ids数组、path、status（pending/updated/not_needed）、reason。updated 需文件存在且非空；not_needed 需理由；pending 阻止完成。
@@ -181,7 +181,7 @@ task["human_acceptance"]["AC-01"] = {
 
 重新交付时可用 `close TASK-001 --complete --review-source docs/tasks/TASK-001.md`；路径必须对应真实非空审阅内容，也可换为项目内独立审阅文件。会话原话不能直接用作该路径，人工验收来源与差异审阅材料是不同职责。
 
-`update` 报快照过期时，重新读取并基于当前内容应用修改，不只替换时间戳。`verify` 保存独立RUN，不改写任务记录；`update`、`pause`、`resume --activate` 和 `close --complete` 等任务写入会更新记录。以上是按需要选取的操作示例，不要求每次任务执行固定命令序列。
+`update` 报快照过期时，从 `resume TASK-001` 返回的 `task` 取得当前完整快照，在其上重新应用修改，不只替换时间戳。`verify` 保存独立RUN，不改写任务记录；`update`、`pause`、`resume --activate` 和 `close --complete` 等任务写入会更新记录。仅修改 document_sync 等处置元数据不会改变 RUN 的任务标准指纹；目标、范围、授权、验收项，以及所选检查的其他相关输入变化会使对应 RUN 失效。已完成任务的受审记录另按其内容重新核对。修改后先看 resume/close 的具体缺口，只复验受影响检查。以上是按需要选取的操作示例，不要求每次任务执行固定命令序列。
 
 ## 历史在途执行处置
 
