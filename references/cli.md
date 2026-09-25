@@ -1,6 +1,6 @@
 # 脚本接口
 
-Python 3.10+，macOS/Linux，标准库。以下 `H` 表示本 Skill 的 `scripts/harness.py` 实际路径；命令中用实际路径替换。本页只约束脚本模式；模式选择见 [lifecycle.md](lifecycle.md#模式与生效边界)。全局 `--root PROJECT` 放在子命令前。返回码：0 成功或预览，1 检查未满足，2 配置或操作错误。
+Python 3.10+，macOS/Linux，标准库。以下 `H` 表示本 Skill 的 `scripts/harness.py` 实际路径；命令中用实际路径替换。本页只约束脚本模式；模式选择见 [lifecycle.md](lifecycle.md#模式与生效边界)。全局 `--root PROJECT` 放在子命令前。返回码：0 成功或预览，1 检查未满足，2 配置或操作错误（包括已保存任务但摘要待同步的部分成功，见下文）。
 
 | 命令 | 输入与作用 |
 |---|---|
@@ -14,6 +14,8 @@ Python 3.10+，macOS/Linux，标准库。以下 `H` 表示本 Skill 的 `scripts
 | `python3 H --root PROJECT resume TASK-001 --format text` | 中文摘要展示同一任务、证据及下一动作；默认仍为 JSON |
 | `python3 H --root PROJECT resume TASK-001 --activate` | 核对现场后恢复为进行中 |
 | `python3 H --root PROJECT reconcile-run TASK-001 RUN-ID --outcome stopped --source docs/recovery.md` | 核对现场后追加历史在途 RUN 处置，不改原件或提供通过证据 |
+| `python3 H --root PROJECT reconcile-run TASK-001 RUN-ID --damaged --outcome stopped --source docs/recovery.md` | 现场核对后追加损坏回执处置，保留原件；全部当前必需检查须在处置后重验 |
+| `python3 H --root PROJECT sync-status TASK-001` | 从指定任务重建状态摘要；不改变任务、执行检查或重放原动作 |
 | `python3 H --root PROJECT close TASK-001` | 核对当前交付条件并保存检查结果，不自动标完成 |
 | `python3 H --root PROJECT close TASK-001 --format text` | 用中文展示同一验收、检查和证据判定；仍保存交付回执 |
 | `python3 H --root PROJECT close TASK-001 --complete --review-source docs/review.md` | 引用真实语义审阅，条件满足时完成，否则阻塞并列缺口 |
@@ -104,7 +106,7 @@ status不能与requirements、validation或agent_policy映射到同一实际文�
 
 begin 后唯一状态在 Markdown 的 `harness-task` 块。新任务使用 v2，并建立下述默认字段；未审阅状态不能通过 close。模板 records/task.md 的职责由同一数据块承载，正文仅补事实说明，不重复状态。脚本不会自动迁移非结构化历史。
 
-人工验收字段见 verification.md。RUN 位于 `.harness/evidence/TASK/RUN/`，含 summary.json、summary.sha256、output.log 与适用的 test-report.json。交付检查结果在 `.harness/close/TASK/`。回执原样保留，不删除失败来取得通过。
+人工验收字段见 verification.md。RUN 位于 `.harness/evidence/TASK/RUN/`；新RUN使用schema_version=2，含 summary.json、output.log 与适用的 test-report.json。summary.json 的 receipt_sha256 校验其余字段的规范JSON内容，摘要与校验值单次原子替换；不再另写summary.sha256。旧RUN v1仍按summary.json原始字节及summary.sha256读取，不改历史原件。旧执行器不能消费新RUN v2，恢复/继续执行须使用支持该格式的版本；任务v2和配置v1不变。单文件替换避免拆分提交窗口，不承诺文件系统断电持久性或防篡改。交付检查结果在 `.harness/close/TASK/`。回执原样保留，不删除失败来取得通过。
 
 超时/正常中断对本次子进程组先发SIGTERM，最多等待2秒；组仍存在时发送SIGKILL，再最多等待2秒确认，不因组长先退出而省略后代清理。确认组消失后记录interrupted及实际退出码；无法确认停止（包括清理被再次中断）时保留running、finished_at为空及停止状态未知的原因，后续成功不能消除此在途缺口，须现场核对后按reconcile-run追加处置。执行器被SIGKILL或机器断电时RUN也可能停在running。resume报告缺口，不能凭旧PID自动杀进程或重做。首版没有后台常驻服务；另建会话或进程组的外部操作不在本次进程组的清理范围内。
 
@@ -143,14 +145,14 @@ purpose.user_outcome 未提供时复用 goal；显式空白或坏值仍是草稿
 {"document_sync":{"reviewed":true,"no_change_reason":"本次修复恢复既有规则，规则正文不变","items":[]}}
 ```
 
-这只是字段片段；update 需要完整任务快照。先从 resume 的 task 字段取得完整对象，修改后保存到临时 JSON，再运行 `python3 H --root PROJECT update TASK --spec snapshot.json`；保留 updated_at，防止覆盖其他执行者新内容。不能由 update 改 id、schema、状态、创建时间、迁移与完成审阅字段。`begin/update` 在写入前汇总 decisions 与 document_sync.items 已填写条目的结构错误并给出字段路径；待处置的合法草稿仍可保存，完成条件由 close 核对。历史记录继续通过 resume/close 报缺口，不因新增写入校验自动改写。人工确认只能按真实来源维护。
+这只是字段片段；update 需要完整任务快照。先从 resume 的 task 字段取得完整对象，修改后保存到临时 JSON，再运行 `python3 H --root PROJECT update TASK --spec snapshot.json`；保留 updated_at，防止覆盖其他执行者新内容。不能由 update 改 id、schema、状态、创建时间、迁移与完成审阅字段。`begin/update` 在写入前汇总 decisions 与 document_sync.items 已填写条目的结构错误并给出字段路径；待处置的合法草稿仍可保存，完成条件由 close 核对。resume/close 对 changes、followups、human_items 和 risk_routes 逐项检查必需字段的类型与内容，缺口标出数组下标和字段；一项错误不遮住其他条目。历史记录通过同一入口报缺口，不因本次修复自动改写。人工确认只能按真实来源维护。
 
 - decisions：每项 id、kind（confirmed/authorized/candidate/rejected/observation）、source、summary、rule_ref。已确认或授权内改变规则且有 rule_ref 时，关联同步处置；候选不能当正式依据。
 - document_sync：reviewed、no_change_reason、items。items 每项 id、decision_ids数组、path、status（pending/updated/not_needed）、reason。updated 需文件存在且非空；not_needed 需理由；pending 阻止完成。
-- changes：每项 path、summary；删除文件可记录路径，语义审阅核对实际差异。
-- followups：每项 id、summary、owner、trigger、source。不能转移本次必需验收规避完成要求。
-- human_items：每项 id、question、recommendation、materials项目内路径数组、acceptance_id或null。需要人判断与人已确认分开。
-- risk_routes：每项 kind（experiment/recovery/side_effect/incident）、applicable布尔、reason、record_ref。适用时需记录文件；风险本身的结果要求加入验收检查。
+- changes：每项 path 为非空项目相对路径、summary 为非空文字；删除文件可记录路径，语义审阅核对实际差异。
+- followups：每项 id、summary、owner、trigger、source 均为非空文字。不能转移本次必需验收规避完成要求。
+- human_items：每项 id、question、recommendation 为非空文字，materials 为非空的项目内路径数组，acceptance_id 为已知验收 ID 或 null。需要人判断与人已确认分开。
+- risk_routes：每项 kind 为 experiment/recovery/side_effect/incident，applicable 为布尔值，reason 为非空文字；适用时 record_ref 需指向项目内非空文件。不适用时可省略 record_ref。风险本身的结果要求加入验收检查。
 
 未完整的v2处置可以保存为草稿，但不能通过交付检查。JSON与文本resume均显示可用信息及具体缺口；文本中必需展示字段的显式空白或未完整内容标“未填写”，可省略字段按上述复用约定展示；不把草稿缺口补成有效内容，也不改写任务或重放命令。
 
@@ -177,6 +179,8 @@ task["human_acceptance"]["AC-01"] = {
 
 `close` 默认只核对并保存回执；`close --complete` 因交付缺口失败才将任务置为 `blocked`。参数或材料错误不表示已改变任务状态，以重新读取的记录为准。
 
+任务是保存事实，状态摘要是派生视图。任务文件成功保存后若摘要写入失败，CLI仍返回2，但stderr JSON为status=partial，并含task_committed=true、task_id、task_state、updated_at、status_synced=false和next_action。此时不要重放begin/update/pause/activate/complete，先读取任务确认，再执行`sync-status TASK-001`。该命令只刷新指定任务的摘要（可重复执行），不改任务状态/时间、审阅绑定或RUN，不执行验证命令。它会重新核对当前证据以生成摘要，成功仅代表摘要同步，不代表任务验收通过。若失败动作是close --complete，partial还含receipt_pending=true；摘要同步后按next_action再运行不带--complete的`close TASK-001`，仅补当前交付检查回执，供Stop等消费者核对，不重复完成动作。摘要标记本身损坏时先修复标记，命令不猜测覆盖人工正文。正常返回结构不变；进程被强制终止而无结果时，仍须先读取现场判断提交情况。
+
 需要修改记录时，先 `resume TASK-001`，在当前 `task` 上应用修改，保留其 `state` 和 `updated_at` 后 `update`；`blocked` 本身不阻止内容更新。若接着需要运行验证，核对现场后执行 `resume TASK-001 --activate`，再 `verify TASK-001 CHECK_ID`，其中检查ID取自本任务验收。已有证据仍有效且只补齐记录时，不因收尾失败自动重跑检查。
 
 重新交付时可用 `close TASK-001 --complete --review-source docs/tasks/TASK-001.md`；路径必须对应真实非空审阅内容，也可换为项目内独立审阅文件。会话原话不能直接用作该路径，人工验收来源与差异审阅材料是不同职责。
@@ -185,6 +189,12 @@ task["human_acceptance"]["AC-01"] = {
 
 ## 历史在途执行处置
 
-仅对留在 running 的 RUN 使用 reconcile-run；先核对实际进程、请求身份、目标状态及副作用结局，不能凭旧 PID、新一次成功或正文声明自动认定已结束。--outcome finished / stopped 表示已核对执行结束 / 停止；结局未知不调用解除。--source 指向包含核对事实的项目内材料，可用当前任务正文，不能用状态派生文件。
+不带 --damaged 时，仅对留在 running 的 RUN 使用 reconcile-run；先核对实际进程、请求身份、目标状态及副作用结局，不能凭旧 PID、新一次成功或正文声明自动认定已结束。--outcome finished / stopped 表示已核对执行结束 / 停止；结局未知不调用解除。--source 指向包含核对事实的项目内材料，可用当前任务正文，不能用状态派生文件。
 
 追加记录位于 .harness/reconciliations/TASK/RUN/，绑定任务、原 RUN 散列、材料散列和结局，不改原执行记录。最近处置损坏或材料、原件变化时不回退旧处置；重新核对后追加新记录。有效处置只解除该历史在途缺口，最新必需检查仍须真实通过。脚本不探测进程是否存活或替人证明材料真实，不停止进程、不重发副作用。
+
+### 损坏回执的现场处置
+
+原summary缺失、不可解析、身份或校验错误等情况下，普通reconcile-run拒绝解除。先核对实际操作身份、进程、目标结果和副作用，确认已结束或停止且现存文件可安全读取后，显式加`--damaged`追加处置；完整回执不能走该入口，未知结局不能解除，缺材料或路径越界仍拒绝。处置v2绑定现存RUN目录文件清单及内容散列（沿目录输入规则忽略__pycache__与.DS_Store）、现场材料和时间；不删除或修补原件。仅创建目录就中断的空RUN也可按现场事实处置。
+
+因损坏回执的check_id不可依赖，处置后当前每个必需检查都须取得started_at晚于最后一次有效损坏处置的新RUN；先前成功及处置记录本身均不能提供通过证据，最新失败仍不能回退。原件增删改、删除原目录、核对材料变化或最新处置损坏仍阻塞，不回退旧处置；重新核对后可追加处置并重验。无法读取或确认副作用的情况保持未解决。此路径不是人工确认自动化，核对事实真实性仍由AI/人负责。

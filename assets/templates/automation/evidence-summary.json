@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "task_id": null,
   "run_id": null,
   "check_id": null,
@@ -14,5 +14,6 @@
   "validity": "indeterminate",
   "counts": null,
   "reason": "仅示意未执行记录；实际 RUN 由 verify 生成，不复制为证据。",
-  "log_sha256": null
+  "log_sha256": null,
+  "receipt_sha256": null
 }

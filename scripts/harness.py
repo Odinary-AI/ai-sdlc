@@ -17,7 +17,7 @@ import uuid
 import fcntl
 import importlib.util
 
-VERSION = '0.6.1-dev'
+VERSION = '0.7.0-dev.1'
 PACKAGE = Path(__file__).resolve().parents[1]
 _scan_spec = importlib.util.spec_from_file_location('ai_sdlc_scan_coverage', PACKAGE/'scripts/scan_coverage.py')
 scan_coverage = importlib.util.module_from_spec(_scan_spec)
@@ -30,6 +30,15 @@ START, END = '<!-- harness:status:start -->', '<!-- harness:status:end -->'
 
 class HarnessError(Exception):
     pass
+
+class TaskCommittedError(HarnessError):
+    """The authority was saved; only its derived status still needs syncing."""
+    def __init__(self, t, cause):
+        super().__init__(f'任务已保存，状态摘要待同步: {cause}；运行 sync-status {t["id"]}，不要重放原动作')
+        self.result = {'status': 'partial', 'error': str(self), 'task_committed': True,
+                       'task_id': t['id'], 'task_state': t['state'],
+                       'updated_at': t['updated_at'], 'status_synced': False,
+                       'next_action': f'sync-status {t["id"]}'}
 
 def require(condition, message):
     if not condition:
@@ -262,19 +271,39 @@ def human_item_gaps(root, t, required=False):
     items = t.get('human_items', [])
     if not isinstance(items, list) or (required and not items):
         return ['等待人需要具体问题与材料'], materials
-    for item in items:
-        try:
-            require(isinstance(item, dict)
-                    and all(isinstance(item.get(k), str) and item[k].strip()
-                            for k in ('id', 'question', 'recommendation'))
-                    and isinstance(item.get('materials'), list) and item['materials'],
-                    '待人事项缺问题或材料')
-            for path in item['materials']:
-                materials[path] = material_digest(root, path, t['id'])
-            require(not item.get('acceptance_id') or item['acceptance_id'] in {a['id'] for a in t['acceptance']},
-                    '待人事项引用未知验收')
-        except (HarnessError, KeyError, TypeError, OSError) as exc:
-            gaps.append(str(exc))
+    acceptances = t.get('acceptance', [])
+    if not isinstance(acceptances, list) or any(not isinstance(a, dict) or not isinstance(a.get('id'), str) for a in acceptances):
+        gaps.append('验收标准结构无效，无法核对待人事项引用')
+        acceptance_ids = set()
+    else:
+        acceptance_ids = {a['id'] for a in acceptances}
+    for i, item in enumerate(items):
+        label = f'human_items[{i}]'
+        if not isinstance(item, dict):
+            gaps.append(f'待人事项缺问题或材料: {label} 应为对象')
+            continue
+        for key in ('id', 'question', 'recommendation'):
+            if not isinstance(item.get(key), str) or not item[key].strip():
+                gaps.append(f'待人事项缺问题或材料: {label}.{key} 应为非空字符串')
+        paths = item.get('materials')
+        if not isinstance(paths, list) or not paths:
+            gaps.append(f'待人事项缺问题或材料: {label}.materials 应为非空路径数组')
+        else:
+            for j, path in enumerate(paths):
+                path_label = f'{label}.materials[{j}]'
+                if not isinstance(path, str) or not path.strip():
+                    gaps.append(f'待人事项缺问题或材料: {path_label} 应为非空路径字符串')
+                    continue
+                try:
+                    materials[path] = material_digest(root, path, t['id'])
+                except (HarnessError, OSError) as exc:
+                    gaps.append(f'{path_label}: {exc}')
+        acceptance_id = item.get('acceptance_id')
+        if acceptance_id is not None:
+            if not isinstance(acceptance_id, str) or not acceptance_id.strip():
+                gaps.append(f'{label}.acceptance_id 应为验收 ID 或 null')
+            elif acceptance_id not in acceptance_ids:
+                gaps.append(f'待人事项引用未知验收: {label}.acceptance_id')
     return gaps, materials
 
 def record_gaps(root, t):
@@ -312,16 +341,44 @@ def record_gaps(root, t):
             if d.get('kind') in ('confirmed', 'authorized') and d.get('rule_ref'):
                 material(d['rule_ref']);check(d['id'] in covered, f'{d["id"]}: 规则决定未关联同步处置')
         check(covered <= decision_ids, '同步引用未知决定')
-        for x in t['changes']:
-            safe(root, x['path']);check(bool(x.get('summary')), '实际差异缺说明')
-        for x in t['followups']:
-            check(all(x.get(k) for k in ('id','summary','owner','trigger','source')), '范围外后续缺归属或触发')
-        for x in t['risk_routes']:
-            check(x.get('kind') in ('experiment','recovery','side_effect','incident'), '风险分类无效')
-            check(type(x.get('applicable')) is bool and bool(x.get('reason')), '风险缺适用判断或理由')
-            if x.get('applicable'): material(x['record_ref'])
     except (HarnessError, KeyError, TypeError, AttributeError, OSError) as exc:
         gaps.append(f'任务处置无效: {exc}')
+    for i, item in enumerate(t['changes']):
+        label = f'changes[{i}]'
+        path = item.get('path')
+        if not isinstance(path, str) or not path.strip():
+            gaps.append(f'{label}.path 应为非空项目相对路径')
+        else:
+            try:
+                safe(root, path)
+            except (HarnessError, OSError) as exc:
+                gaps.append(f'{label}.path: {exc}')
+        if not isinstance(item.get('summary'), str) or not item['summary'].strip():
+            gaps.append(f'{label}.summary 应为非空字符串')
+    for i, item in enumerate(t['followups']):
+        label = f'followups[{i}]'
+        for key in ('id', 'summary', 'owner', 'trigger', 'source'):
+            if not isinstance(item.get(key), str) or not item[key].strip():
+                gaps.append(f'{label}.{key} 应为非空字符串')
+    for i, item in enumerate(t['risk_routes']):
+        label = f'risk_routes[{i}]'
+        if item.get('kind') not in ('experiment', 'recovery', 'side_effect', 'incident'):
+            gaps.append(f'风险分类无效: {label}.kind')
+        if type(item.get('applicable')) is not bool:
+            gaps.append(f'{label}.applicable 应为布尔值')
+        if not isinstance(item.get('reason'), str) or not item['reason'].strip():
+            gaps.append(f'{label}.reason 应为非空字符串')
+        record_ref = item.get('record_ref')
+        if record_ref is not None and not isinstance(record_ref, str):
+            gaps.append(f'{label}.record_ref 应为项目相对路径或 null')
+        elif item.get('applicable') is True:
+            if not record_ref or not record_ref.strip():
+                gaps.append(f'{label}.record_ref 适用时必须指向非空材料')
+            else:
+                try:
+                    material(record_ref)
+                except (HarnessError, OSError) as exc:
+                    gaps.append(f'{label}.record_ref: {exc}')
     return gaps, materials
 
 def migrate_task(root, c, tid, apply=False):
@@ -451,7 +508,25 @@ def material_digest(root, rel, tid, kind='file'):
     require(bool(content.strip()), f'材料缺失或为空: {rel}')
     return digest(content)
 
-def reconcile_run(root, c, tid, runid, outcome, source):
+def read_run(root, tid, directory):
+    for name in ('summary.json', 'summary.sha256', 'output.log', 'test-report.json'):
+        safe(root, str((directory/name).relative_to(root)))
+    p = directory/'summary.json'
+    rec = load(p)
+    require(isinstance(rec, dict), '执行回执必须是 JSON 对象')
+    require(rec.get('task_id') == tid and rec.get('run_id') == directory.name, 'RUN 对象不匹配')
+    if rec.get('schema_version') == 2:
+        require(rec.get('receipt_sha256') == digest({k:v for k,v in rec.items() if k != 'receipt_sha256'}), '执行回执校验和不符')
+    else:
+        require(rec.get('schema_version') == 1, '未知 RUN 版本')
+        require((directory/'summary.sha256').read_text().strip() == digest(p.read_bytes()), '执行回执校验和不符')
+    return rec
+
+def run_snapshot(root, directory):
+    require(directory.is_dir(), 'RUN 目录不存在')
+    return digest({str(p.relative_to(directory)): digest(p.read_bytes()) for p in input_files(root, directory)})
+
+def reconcile_run(root, c, tid, runid, outcome, source, damaged=False):
     """Append a checked disposition. It never rewrites a RUN or supplies a pass."""
     identifier(runid)
     require(outcome in ('finished', 'stopped'), '未知结局不能解除在途缺口')
@@ -460,17 +535,26 @@ def reconcile_run(root, c, tid, runid, outcome, source):
         require(t['schema_version'] == 2, '旧任务先 migrate-task')
         directory = safe(root, f'.harness/evidence/{tid}/{runid}')
         p = safe(root, str((directory/'summary.json').relative_to(root)))
-        rec = load(p)
-        require(isinstance(rec, dict) and rec.get('task_id') == tid and rec.get('run_id') == runid, 'RUN 对象不匹配')
-        seal_path = safe(root, str((directory/'summary.sha256').relative_to(root)))
-        require(seal_path.read_text().strip() == digest(p.read_bytes()), '执行回执校验和不符')
-        require(rec.get('overall_status') == 'running', '只处置未结束的历史 RUN；已结束结果保留原样')
+        if damaged:
+            try:
+                read_run(root, tid, directory)
+            except (HarnessError, OSError, ValueError):
+                pass
+            else:
+                raise HarnessError('回执完整，不能按损坏处置；在途执行使用普通 reconcile-run')
+            run_hash = run_snapshot(root, directory)
+        else:
+            rec = read_run(root, tid, directory)
+            require(rec.get('overall_status') == 'running', '只处置未结束的历史 RUN；已结束结果保留原样')
+            run_hash = digest(p.read_bytes())
         require(safe(root, source).resolve() != safe(root, c['authorities']['status']).resolve(), '状态摘要不能作为现场核对材料')
         kind = source_kind(root, source, tid)
-        result = {'schema_version': 1, 'task_id': tid, 'run_id': runid,
-                  'run_sha256': digest(p.read_bytes()), 'outcome': outcome,
+        result = {'schema_version': 2 if damaged else 1, 'task_id': tid, 'run_id': runid,
+                  'run_sha256': run_hash, 'outcome': outcome,
                   'source': source, 'source_kind': kind,
                   'source_sha256': material_digest(root, source, tid, kind), 'time': now()}
+        if damaged:
+            result['kind'] = 'damaged'
         result['sha256'] = digest(result)
         name = dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%S%f-') + uuid.uuid4().hex
         rel = f'.harness/reconciliations/{tid}/{runid}/{name}.json'
@@ -482,15 +566,20 @@ def resolved_run(root, tid, runid, summary_path):
     receipts = sorted(base.glob('*.json'))
     if not receipts:
         return None
+    safe(root, str(summary_path.relative_to(root)))
     p = safe(root, str(receipts[-1].relative_to(root)))
     r = load(p)
     require(isinstance(r, dict), '在途处置必须是 JSON 对象')
     require(r.get('sha256') == digest({k:v for k,v in r.items() if k != 'sha256'}), '在途处置校验和不符')
-    require(r.get('schema_version') == 1 and r.get('task_id') == tid and r.get('run_id') == runid, '在途处置对象不匹配')
+    damaged = r.get('schema_version') == 2 and r.get('kind') == 'damaged'
+    require((r.get('schema_version') == 1 or damaged) and r.get('task_id') == tid and r.get('run_id') == runid, '在途处置对象不匹配')
     require(r.get('outcome') in ('finished', 'stopped'), '在途处置结局仍未知')
-    require(r.get('run_sha256') == digest(summary_path.read_bytes()), '在途处置与原 RUN 不符')
+    current = run_snapshot(root, summary_path.parent) if damaged else digest(summary_path.read_bytes())
+    require(r.get('run_sha256') == current, '在途处置与原 RUN 不符')
     require(r.get('source_sha256') == material_digest(root, r.get('source'), tid, r.get('source_kind')), '现场核对材料已改变，需重新核对在途处置')
-    return r['sha256']
+    require(isinstance(r.get('time'), str), '处置时间缺失')
+    require(dt.datetime.fromisoformat(r['time']).tzinfo is not None, '处置时间须含时区')
+    return r
 
 def validate_task(t, c):
     require(t.get('schema_version') in (1,2), '未知任务版本')
@@ -518,6 +607,22 @@ def write_task(root, c, t, body):
     t['updated_at'] = now()
     newblock = '```harness-task\n' + json.dumps(t, ensure_ascii=False, indent=2) + '\n```'
     updated = BLOCK.sub(lambda _: newblock, body, count=1)
+    sp, prior = render_status(root, c, t)
+    atomic(task_path(root, t['id']), updated)
+    try:
+        atomic(sp, prior)
+    except (HarnessError, OSError) as exc:
+        raise TaskCommittedError(t, exc) from exc
+
+def sync_status(root, c, tid):
+    with lock(root):
+        t, _ = read_task(root, tid)
+        sp, content = render_status(root, c, t)
+        atomic(sp, content)
+        return {'task_id': tid, 'task_state': t['state'], 'updated_at': t.get('updated_at'),
+                'status_synced': True, 'status_path': str(sp.relative_to(root))}
+
+def render_status(root, c, t):
     sp = safe(root, c['authorities']['status'])
     prior = sp.read_text() if sp.exists() else '# 当前工作入口\n'
     rel = os.path.relpath(task_path(root, t['id']), sp.parent)
@@ -535,8 +640,7 @@ def write_task(root, c, t, body):
         prior = prior[:prior.index(START)] + section + prior[prior.index(END)+len(END):]
     else:
         prior = prior.rstrip() + '\n\n' + section + '\n'
-    atomic(task_path(root, t['id']), updated)
-    atomic(sp, prior)
+    return sp, prior
 
 def begin(root, c, spec):
     require(isinstance(spec, dict), '任务规格必须是 JSON 对象')
@@ -604,8 +708,9 @@ def fingerprints(root, c, t, cid):
     return result
 
 def seal(root, run, rec):
-    write_json(safe(root, run + '/summary.json'), rec)
-    atomic(safe(root, run + '/summary.sha256'), digest(safe(root, run + '/summary.json').read_bytes()) + '\n')
+    require(rec.get('schema_version') == 2, '新写入 RUN 须为 v2；历史回执不改写')
+    payload = {k:v for k,v in rec.items() if k != 'receipt_sha256'}
+    write_json(safe(root, run + '/summary.json'), {**payload, 'receipt_sha256': digest(payload)})
 
 def stop_process_group(proc):
     """Bound cleanup of this execution's group, including descendants of an exited leader."""
@@ -645,7 +750,7 @@ def verify(root, c, tid, cid):
     initial = fingerprints(root, c, t, cid)
     runid = dt.datetime.now(dt.timezone.utc).strftime('RUN-%Y%m%dT%H%M%S%f-') + uuid.uuid4().hex[:8]
     run = f'.harness/evidence/{tid}/{runid}'
-    rec = {'schema_version': 1, 'task_id': tid, 'run_id': runid, 'check_id': cid,
+    rec = {'schema_version': 2, 'task_id': tid, 'run_id': runid, 'check_id': cid,
            'started_at': now(), 'finished_at': None, 'argv': chk['argv'], 'cwd': str(root),
            'overall_status': 'running', 'verification_status': 'unverified', 'exit_code': None,
            'inputs': initial, 'validity': 'indeterminate', 'counts': None, 'reason': '', 'pid': os.getpid()}
@@ -820,27 +925,39 @@ def assess(root, c, t):
             gaps.append(str(exc))
     selected = {}
     base = safe(root, f'.harness/evidence/{t["id"]}')
-    dirs = sorted((p for p in base.iterdir() if p.is_dir()), reverse=True) if base.exists() else []
-    records, reconciliations = [], {}
+    names = {p.name for p in base.iterdir() if p.is_dir()} if base.exists() else set()
+    dispositions = safe(root, f'.harness/reconciliations/{t["id"]}')
+    if dispositions.exists():
+        names.update(p.name for p in dispositions.iterdir() if p.is_dir())
+    dirs = [base/name for name in sorted(names, reverse=True)]
+    records, reconciliations, damaged_after = [], {}, None
     for directory in dirs:
         try:
             safe(root, str(directory.relative_to(root)))
-            for name in ('summary.json', 'summary.sha256', 'output.log', 'test-report.json'):
-                safe(root, str((directory/name).relative_to(root)))
             p = directory/'summary.json'
-            rec = load(p)
-            require(isinstance(rec, dict), '执行回执必须是 JSON 对象')
-            require((directory/'summary.sha256').read_text().strip() == digest(p.read_bytes()), '执行回执校验和不符')
-            require(rec.get('task_id') == t['id'] and rec.get('run_id') == directory.name, 'RUN 对象不匹配')
+            resolution = resolved_run(root, t['id'], directory.name, p)
+            if resolution is not None:
+                reconciliations[directory.name] = resolution['sha256']
+                if resolution.get('kind') == 'damaged':
+                    cutoff = dt.datetime.fromisoformat(resolution['time'])
+                    damaged_after = max(damaged_after, cutoff) if damaged_after else cutoff
+                    continue
+            rec = read_run(root, t['id'], directory)
             if rec.get('overall_status') == 'running':
-                resolution = resolved_run(root, t['id'], directory.name, p)
                 if resolution is None:
                     gaps.append(f'{directory.name}: 执行仍在进行或中断后结局未知，先核对现场并 reconcile-run')
-                else:
-                    reconciliations[directory.name] = resolution
             records.append((directory, rec))
-        except (HarnessError, OSError) as exc:
+        except (HarnessError, OSError, ValueError, TypeError) as exc:
             gaps.append(f'无效执行回执 {directory.name}: {exc}')
+    if damaged_after is not None:
+        for cid in task_check_ids(t):
+            matches = [r for _, r in records if r.get('check_id') == cid]
+            try:
+                fresh = bool(matches) and dt.datetime.fromisoformat(matches[0]['started_at']) > damaged_after
+            except (KeyError, ValueError, TypeError):
+                fresh = False
+            if not fresh:
+                gaps.append(f'{cid}: 损坏回执的检查归属不可依赖，须在最后一次损坏处置后重新 verify')
     global_gaps = list(gaps)
     check_results, acceptance_results = {}, []
     for ac in t['acceptance']:
@@ -911,7 +1028,14 @@ def close(root, c, tid, complete=False, review_source=None):
                 if t['schema_version'] == 2:
                     t.update(review_sha256=result['review_sha256'], review_kind=review_kind,
                              review_record_sha256=digest(review_record(t)))
-            write_task(root, c, t, body)
+            try:
+                write_task(root, c, t, body)
+            except TaskCommittedError as exc:
+                exc.result['receipt_pending'] = True
+                followup = f'随后运行 close {tid}（不加 --complete，仅补交付回执）'
+                exc.result['error'] += '；' + followup
+                exc.result['next_action'] += '；' + followup
+                raise
         if complete and result['conditions_met']:
             result['record_fingerprint'] = assess(root, c, t)['record_fingerprint']
         result['task_state'] = t['state']
@@ -1002,6 +1126,8 @@ def main(argv=None):
     p = sub.add_parser('migrate-task', help='旧任务升级预览；--apply 保留原件并写入'); p.add_argument('task'); p.add_argument('--apply', action='store_true')
     p = sub.add_parser('reconcile-run', help='现场核对后追加历史在途 RUN 处置，不改写原件或代替验证')
     p.add_argument('task'); p.add_argument('run'); p.add_argument('--outcome', choices=['finished','stopped'], required=True); p.add_argument('--source', required=True)
+    p.add_argument('--damaged', action='store_true', help='已核对现场的损坏回执；保留原件，当前必需检查须重新执行')
+    p = sub.add_parser('sync-status', help='仅从任务记录重建状态摘要，不改变任务或重放执行'); p.add_argument('task')
     p = sub.add_parser('update', help='用带更新时间的完整 JSON 快照更新任务'); p.add_argument('task'); p.add_argument('--spec', required=True)
     a = parser.parse_args(argv)
     root = Path(a.root).resolve()
@@ -1019,7 +1145,8 @@ def main(argv=None):
             elif a.command == 'update': result = update_task(root, c, a.task, load(Path(a.spec)))
             elif a.command == 'verify': result = verify(root, c, a.task, a.check)
             elif a.command == 'close': result = close(root, c, a.task, a.complete, a.review_source)
-            elif a.command == 'reconcile-run': result = reconcile_run(root, c, a.task, a.run, a.outcome, a.source)
+            elif a.command == 'reconcile-run': result = reconcile_run(root, c, a.task, a.run, a.outcome, a.source, a.damaged)
+            elif a.command == 'sync-status': result = sync_status(root, c, a.task)
             elif a.command == 'resume': result = resume(root, c, a.task, a.activate)
             else:
                 nonempty(a.next, '下一动作')
@@ -1040,6 +1167,9 @@ def main(argv=None):
         if a.command == 'close': return 0 if result['conditions_met'] else 1
         if a.command == 'doctor': return 0 if result['ready'] else 1
         return 0
+    except TaskCommittedError as exc:
+        print(json.dumps(exc.result, ensure_ascii=False), file=sys.stderr)
+        return 2
     except (HarnessError, KeyError, TypeError, ValueError, OSError) as exc:
         print(json.dumps({'error': str(exc), 'status': 'error'}, ensure_ascii=False), file=sys.stderr)
         return 2
