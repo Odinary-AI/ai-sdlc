@@ -2,7 +2,7 @@
 name: ai-sdlc
 description: Explicitly invoked project engineering mechanism for individual developers and one-person companies. Adopt a project, execute or resume an authorized task, inspect and clean project files, carry out integrated project governance, and check evidence-backed delivery. Invoke only when the user explicitly requests this skill; ordinary discussion does not authorize adoption.
 metadata:
-  version: "0.7.0-dev.1"
+  version: "0.7.0-dev.2"
 ---
 
 # AI工程机制
@@ -42,4 +42,4 @@ metadata:
 
 ## 条件流程
 
-出现实验、恢复、外部副作用或事故时读 [风险流程](references/risk-workflows.md)；任务收尾、漏检误拦和阶段复查读 [维护](references/maintenance.md)；需要复用经验或发现值得保留的方法时按其中的[经验保留与复用](references/maintenance.md#经验保留与复用)处理。Codex 项目选择事件接入时读 [Codex hooks](references/codex-hooks.md)，核对配置、信任及实测状态；核心不依赖该适配，其他平台未验证。普通任务不加载无关指南。
+出现实验、恢复、外部副作用、事故，或涉及旧消费者、新旧共存、部分切换及兼容退出的复杂迁移时读 [风险流程](references/risk-workflows.md)；任务收尾、漏检误拦和阶段复查读 [维护](references/maintenance.md)；需要复用经验或发现值得保留的方法时按其中的[经验保留与复用](references/maintenance.md#经验保留与复用)处理。Codex 项目选择事件接入时读 [Codex hooks](references/codex-hooks.md)，核对配置、信任及实测状态；核心不依赖该适配，其他平台未验证。普通任务不加载无关指南。
