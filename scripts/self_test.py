@@ -92,6 +92,31 @@ class MechanismTests(unittest.TestCase):
                 (self.root/'check.py').write_text(code)
                 self.verify(expected=1); self.assertFalse(self.assess()['conditions_met'])
 
+    def test_early_success_exit_does_not_reuse_previous_report(self):
+        self.begin()
+        old = self.verify()
+        old_report = self.root/old['run']/'test-report.json'
+        before = old_report.read_bytes()
+        (self.root/'check.py').write_text('raise SystemExit(0)\n')
+        current = self.verify(expected=1)
+        self.assertEqual(current['exit_code'], 0)
+        self.assertNotEqual(current['run'], old['run'])
+        self.assertEqual(old_report.read_bytes(), before)
+        self.assertFalse((self.root/current['run']/'test-report.json').exists())
+        (self.root/'check.py').write_text(self.check_code)
+        self.assertFalse(self.assess()['conditions_met'])
+
+    def test_failure_and_malformed_reports_override_success_exit(self):
+        self.begin()
+        for payload in ('{"total":1,"failed":1,"errors":0,"skipped":0}', '{'):
+            with self.subTest(payload=payload):
+                (self.root/'check.py').write_text(
+                    'import os\nfrom pathlib import Path\n'
+                    'Path(os.environ["AI_PROJECT_HARNESS_REPORT"]).write_text(' + repr(payload) + ')\n')
+                result = self.verify(expected=1)
+                self.assertEqual(result['exit_code'], 0)
+                self.assertFalse(self.assess()['conditions_met'])
+
     def test_corrupt_log_and_receipt_block(self):
         self.begin(); run = self.verify()
         (self.root/run['run']/'output.log').write_text('corrupted')
