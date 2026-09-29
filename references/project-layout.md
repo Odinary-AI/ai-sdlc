@@ -27,7 +27,7 @@
 | config/ | 应用运行配置，不重复根目录工具配置 | 按需，提交无秘密的默认/示例配置 |
 | scripts/ | 开发、构建、检查、迁移等辅助工具 | 按需，通常提交；产品业务逻辑归源码 |
 | assets/ | 产品静态源资源 | 按需，通常提交；与public或模块内资源按用途映射，不复制 |
-| docs/requirements.md | 目标、范围、需求与验收 | 基本职责，通常提交 |
+| docs/requirements.md | 项目愿景、当前目标、范围、需求与验收 | 基本职责，通常提交；已有等效来源按实际路径映射 |
 | docs/status.md | 当前工作入口、交接与少量后续待办 | 基本职责，通常提交；详细执行状态归任务 |
 | docs/tasks/TASK-001.md | 任务执行、简单计划/决定/实验和单次发布记录 | 有任务时创建；沿[任务流程](lifecycle.md)维护 |
 | docs/architecture.md、rules.md、ux-guidelines.md、glossary.md | 架构、产品规则、UX及术语的独立正文 | 仅相应内容需要独立维护时建立，通常提交 |
