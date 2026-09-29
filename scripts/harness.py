@@ -4,6 +4,7 @@ import argparse
 import contextlib
 import datetime as dt
 import hashlib
+import html
 import json
 import os
 from pathlib import Path
@@ -16,8 +17,9 @@ import time
 import uuid
 import fcntl
 import importlib.util
+from urllib.parse import unquote, urlsplit
 
-VERSION = '0.8.0-dev.7'
+VERSION = '0.8.0-dev.8'
 PACKAGE = Path(__file__).resolve().parents[1]
 _scan_spec = importlib.util.spec_from_file_location('ai_sdlc_scan_coverage', PACKAGE/'scripts/scan_coverage.py')
 scan_coverage = importlib.util.module_from_spec(_scan_spec)
@@ -152,6 +154,155 @@ def validate_config(root, c, check_ids=None):
 def placeholder(text):
     return bool(re.search(r'\[(?:待填写|待建立|真实路径|创建后|接入后|未确认)[^\]]*\]|\[TODO:', text))
 
+def markdown_targets(text):
+    """Extract common Markdown destinations and image flags, not render Markdown.
+
+    Keep block/code exclusion separate from destination parsing so the same
+    targets drive resource existence and required-navigation checks.
+    """
+    def blank(value):
+        return re.sub(r'[^\n]', ' ', value)
+
+    # Exclusions share source order: fences in comments and comments in code
+    # cannot consume real Markdown following the enclosing construct.
+    body = text
+    cleaned, i = [], 0
+    while i < len(body):
+        if i == 0 or body[i-1] == '\n':
+            line_end = body.find('\n', i)
+            line_end = len(body) if line_end < 0 else line_end + 1
+            line = body[i:line_end]
+            marker = re.match(r'^ {0,3}(`{3,}|~{3,})(.*)$', line.rstrip('\n'))
+            if marker and not (marker[1][0] == '`' and '`' in marker[2]):
+                closing = re.compile(r'^ {0,3}' + re.escape(marker[1][0]) +
+                                     '{' + str(len(marker[1])) + r',}[ \t]*$', re.M)
+                close = closing.search(body, line_end)
+                end = close.end() if close else len(body)
+                cleaned.append(blank(body[i:end])); i = end
+                continue
+            if line.startswith(('    ', '\t')):
+                cleaned.append(blank(line)); i = line_end
+                continue
+        if body[i] == '\\' and i + 1 < len(body):
+            cleaned.append(body[i:i+2]); i += 2
+        elif body.startswith('<!--', i):
+            end = body.find('-->', i + 4)
+            end = len(body) if end < 0 else end + 3
+            cleaned.append(blank(body[i:end])); i = end
+        elif body[i] == '`':
+            run = re.match(r'`+', body[i:])[0]
+            close = re.search(r'(?<!`)' + run + r'(?!`)', body[i+len(run):])
+            end = i + len(run) + close.end() if close else i + len(run)
+            cleaned.append(blank(body[i:end]) if close else body[i:end]); i = end
+        else:
+            cleaned.append(body[i]); i += 1
+    body = ''.join(cleaned)
+
+    def unescape(value):
+        return html.unescape(re.sub(r'\\([!"#$%&\'()*+,\-./:;<=>?@\[\]\\^_`{|}~])', r'\1', value))
+
+    def label(value):
+        return ' '.join(value.split()).casefold()
+
+    def destination(value, start, inline):
+        """Return a raw destination and the first character after its suffix."""
+        pos = start
+        while pos < len(value) and value[pos].isspace(): pos += 1
+        begin = pos
+        if pos < len(value) and value[pos] == '<':
+            pos += 1; begin = pos
+            while pos < len(value) and value[pos] != '>':
+                if value[pos] in '\n<': return None
+                pos += 2 if value[pos] == '\\' and pos + 1 < len(value) else 1
+            if pos >= len(value): return None
+            raw = value[begin:pos]; pos += 1
+        else:
+            depth = 0
+            while pos < len(value):
+                char = value[pos]
+                if char == '\\' and pos + 1 < len(value):
+                    pos += 2; continue
+                if char.isspace() or (char == ')' and depth == 0): break
+                if char == '<': return None
+                if char == '(': depth += 1
+                if char == ')': depth -= 1
+                pos += 1
+            if depth: return None
+            raw = value[begin:pos]
+        space = pos
+        while pos < len(value) and value[pos].isspace(): pos += 1
+        if pos > space and pos < len(value) and value[pos] in '\"\'(':
+            delimiter = ')' if value[pos] == '(' else value[pos]
+            pos += 1
+            while pos < len(value) and value[pos] != delimiter:
+                pos += 2 if value[pos] == '\\' and pos + 1 < len(value) else 1
+            if pos >= len(value): return None
+            pos += 1
+            while pos < len(value) and value[pos].isspace(): pos += 1
+        if re.search(r'\n[ \t]*\n', value[start:pos]): return None
+        if inline:
+            return (unescape(raw), pos + 1) if pos < len(value) and value[pos] == ')' else None
+        return (unescape(raw), pos) if raw and pos == len(value) else None
+
+    definitions = {}
+    pattern = r'^ {0,3}\[([^\]\n]+)\]:[ \t]*(.*)$'
+    def definition(match):
+        parsed = destination(match[2], 0, False)
+        if parsed:
+            definitions.setdefault(label(match[1]), parsed[0])
+            return blank(match[0])
+        return match[0]
+    body = re.sub(pattern, definition, body, flags=re.M)
+    def scan(body):
+        targets, i = [], 0
+        while i < len(body):
+            if body[i] == '\\':
+                i += 2; continue
+            is_image = body.startswith('![', i)
+            start = i + 1 if is_image else i
+            if body[start] != '[':
+                i += 1; continue
+            pos, depth = start + 1, 1
+            while pos < len(body) and depth:
+                if body[pos] == '\\': pos += 2; continue
+                if body[pos] == '[': depth += 1
+                if body[pos] == ']': depth -= 1
+                pos += 1
+            if depth:
+                i += 1; continue
+            text_label = body[start+1:pos-1]
+            parsed = destination(body, pos + 1, True) if body[pos:pos+1] == '(' else None
+            if parsed:
+                target, end = parsed
+            elif body[pos:pos+1] == '[':
+                end = body.find(']', pos + 1)
+                key = label(body[pos+1:end] or text_label) if end >= 0 else ''
+                target = definitions.get(key); end += 1
+            else:
+                target = definitions.get(label(text_label)); end = pos
+            if target is not None:
+                if not is_image:
+                    targets.extend(item for item in scan(text_label) if item[1])
+                targets.append((target, is_image)); i = end
+            else:
+                i = start + 1
+        return targets
+    return scan(body)
+
+def local_markdown_target(source, target):
+    """Resolve URI paths once; never fetch external resources or check anchors."""
+    if target.startswith('#'):
+        return None
+    try:
+        uri = urlsplit(target)
+        if uri.scheme or uri.netloc:
+            return None
+        path = unquote(uri.path)
+    except ValueError:
+        raise HarnessError(f'Markdown目标无法解析: {target}')
+    require('\x00' not in path, f'Markdown目标包含无效路径字符: {target}')
+    return source.parent / path if path else source
+
 def doctor(root, c, check_ids=None):
     validate_config(root, c, check_ids)
     gaps, files = [], []
@@ -171,25 +322,26 @@ def doctor(root, c, check_ids=None):
         for rel in c['checks'][cid]['inputs']:
             if not safe(root, rel).exists():
                 gaps.append(f'{cid}: 输入缺失: {rel}')
-    # Check real Markdown links, not illustrative paths in template code blocks.
+    navigation = {}
     for rel in set(c['authorities'].values()):
         p = safe(root, rel)
         if not p.is_file():
             continue
-        body = re.sub(r'```.*?```', '', p.read_text(), flags=re.S)
-        for target in re.findall(r'\]\(([^)]+)\)', body):
-            if target.startswith(('http:', 'https:', '#', 'mailto:')):
+        navigation[rel] = set()
+        for target, is_image in markdown_targets(p.read_text()):
+            try:
+                candidate = local_markdown_target(p, target)
+            except HarnessError as exc:
+                gaps.append(f'{rel}: {exc}')
                 continue
-            target = target.split('#', 1)[0]
-            candidate = p.parent / target
+            if candidate is None: continue
             if not candidate.exists():
                 gaps.append(f'链接缺失: {rel} -> {target}')
+            if not is_image:
+                navigation[rel].add(candidate.resolve())
     entry = safe(root, c['authorities']['entrypoint'])
     if entry.is_file():
-        body = re.sub(r'```.*?```', '', entry.read_text(), flags=re.S)
-        linked = {(entry.parent / target.split('#', 1)[0]).resolve()
-                  for target in re.findall(r'\]\(([^)]+)\)', body)
-                  if not target.startswith(('http:', 'https:', '#', 'mailto:'))}
+        linked = navigation[c['authorities']['entrypoint']]
         for role in ('agent_policy', 'requirements', 'validation', 'status'):
             target = safe(root, c['authorities'][role]).resolve()
             if target != entry.resolve() and target not in linked:
