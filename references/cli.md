@@ -116,6 +116,8 @@ begin 后唯一状态在 Markdown 的 `harness-task` 块。新任务使用 v2，
 
 标准 unittest 项目可复用本包 `scripts/unittest_report.py`。在项目检查的 argv 中配置 `["python3", "该适配器的实际路径", "--start", "tests", "--pattern", "test_*.py"]`，kind 为 tests。适配器从当前项目目录发现并真实运行测试，保存计数；沿用框架的成功判定，预期失败用例的意外成功（unexpected success）计入 failed，零测试和跳过也非通过。可在授权内将适配器复制到项目 scripts 并把它加入 inputs，便于脱离 Skill 安装目录继续运行。
 
+输出位置依次取环境变量 `AI_PROJECT_HARNESS_REPORT`、`--report`，均未指定时在当前目录的 `.harness/reports/` 下生成唯一文件名。指定路径已有文件会被替换；仅将固定可再生产物用于重复输出，保留历史证据时使用新路径。verify 为每次执行注入独立 RUN 内的报告路径，优先于 `--report`。
+
 doctor 的 ready 仅表示文件、配置和 README 导航检查就绪；接入任务完成还需真实规则审阅、适用检查及交付证据。
 
 ## 诊断与验收视图

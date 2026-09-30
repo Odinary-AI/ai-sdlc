@@ -12,7 +12,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--start', default='tests', help='测试目录，相对目标项目 cwd')
     p.add_argument('--pattern', default='test_*.py')
-    p.add_argument('--report', help='独立运行时可指定报告位置；verify 注入的位置优先')
+    p.add_argument('--report', help='指定输出路径，已有文件会被替换；保留历史请使用新路径。verify 注入的位置优先；未指定时生成唯一报告路径')
     a = p.parse_args()
     sys.path.insert(0, str(Path.cwd()))
     counts = {'total':0, 'failed':0, 'errors':0, 'skipped':0}
