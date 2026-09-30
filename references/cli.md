@@ -200,3 +200,19 @@ task["human_acceptance"]["AC-01"] = {
 原summary缺失、不可解析、身份或校验错误等情况下，普通reconcile-run拒绝解除。先核对实际操作身份、进程、目标结果和副作用，确认已结束或停止且现存文件可安全读取后，显式加`--damaged`追加处置；完整回执不能走该入口，未知结局不能解除，缺材料或路径越界仍拒绝。处置v2绑定现存RUN目录文件清单及内容散列（沿目录输入规则忽略__pycache__与.DS_Store）、现场材料和时间；不删除或修补原件。仅创建目录就中断的空RUN也可按现场事实处置。
 
 因损坏回执的check_id不可依赖，处置后当前每个必需检查都须取得started_at晚于最后一次有效损坏处置的新RUN；先前成功及处置记录本身均不能提供通过证据，最新失败仍不能回退。原件增删改、删除原目录、核对材料变化或最新处置损坏仍阻塞，不回退旧处置；重新核对后可追加处置并重验。无法读取或确认副作用的情况保持未解决。此路径不是人工确认自动化，核对事实真实性仍由AI/人负责。
+
+## 可选Git输入快照
+
+`scripts/evidence_snapshot.py`是独立、可选的只读输入清单工具，两种模式均可使用，不改变harness任务、RUN或验收协议。需要Git；不执行检查、不自动加入close，不要求文档模式建立脚本映射。
+
+```sh
+python3 /实际位置/ai-sdlc/scripts/evidence_snapshot.py --root /项目根目录 --source worktree --path src --path tests --output /已存在目录/worktree-new.json
+python3 /实际位置/ai-sdlc/scripts/evidence_snapshot.py --root /项目根目录 --source index --path src --path tests --output /已存在目录/index-new.json
+python3 /实际位置/ai-sdlc/scripts/evidence_snapshot.py --root /项目根目录 --source commit --ref HEAD --path src --path tests --output /已存在目录/commit-new.json
+```
+
+`--path`必填、可重复，按仓库相对文件/目录字面前缀选择（不是glob），归一化并去重；不允许根目录、绝对或上级路径。工作树选已跟踪及未忽略的未跟踪文件，已跟踪但删除的文件标missing；不会发现被忽略的新文件。index从当前暂存树读取、commit从解析后的固定提交读取，均不混入工作树内容；index调用Git write-tree可能写Git对象库，不修改暂存内容或分支。未合并索引、非普通文件（含符号链接及子模块）、无文件匹配或读取失败返回2，不生成成功快照。部分选择无匹配会列入unmatched_paths，使用者须核对缺口，不将剩余范围当完整通过。
+
+输出记录source、固定对象identity（工作树为null）、去重paths、files的SHA-256/执行权限或missing、files_sha256及采集起止时间。files_sha256只用于比较文件集合、内容与权限，不包含选择范围、对象来源或未匹配项；比较时同时核对这些字段。输出父目录须已存在，输出必须在选择范围外且不存在；排他创建拒绝覆盖旧文件。工具不读取文件正文到报告，但路径和散列仍应按项目隐私范围保留，不自动上传。
+
+此清单不冻结工作树、不能证明扫描语义或环境相同；捕获期间并发变化可能得到混合状态。暂停相关写入、采证前后重取新快照并按风险核对，不能用两次相同证明中间未变化。检查应实际读取所声明的对象；要检查暂存/提交内容，可在隔离导出目录执行现有检查。不要只检查工作树的git diff后宣称暂存区已验收。历史快照保持原样，工具不替代现行RUN失效检查。

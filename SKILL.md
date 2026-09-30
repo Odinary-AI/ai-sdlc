@@ -2,7 +2,7 @@
 name: ai-sdlc
 description: Explicitly invoked project engineering mechanism for individual developers and one-person companies. Adopt a project, execute or resume an authorized task, inspect and clean project files, carry out integrated project governance, and check evidence-backed delivery. Invoke only when the user explicitly requests this skill; ordinary discussion does not authorize adoption.
 metadata:
-  version: "1.0.0"
+  version: "1.1.0-dev.1"
 ---
 
 # AI工程机制
@@ -34,7 +34,7 @@ metadata:
 
 ## 执行工具
 
-脚本模式使用本 Skill 的 `scripts/harness.py`，带 `--root` 指定目标项目。运行 `--help` 或阅读接口说明后选择命令，不把文档中的示例路径照抄执行。生产脚本只需 Python 3.10+，支持 macOS/Linux。
+脚本模式使用本 Skill 的 `scripts/harness.py`，带 `--root` 指定目标项目。运行 `--help` 或阅读接口说明后选择命令，不把文档中的示例路径照抄执行。核心脚本只需 Python 3.10+，支持 macOS/Linux。可选[Git输入快照](references/cli.md#可选git输入快照)另需Git，用于对象清单核对，不替代验证或改变模式。
 
 恢复与交付命令提供验收—检查—证据视图及失效定位；接入或相关机制变化时可复用随包自检。用法和边界见[脚本接口](references/cli.md#诊断与验收视图)。
 
