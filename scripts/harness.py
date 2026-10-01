@@ -19,7 +19,7 @@ import fcntl
 import importlib.util
 from urllib.parse import unquote, urlsplit
 
-VERSION = '1.1.0-dev.2'
+VERSION = '1.2.1-dev.1'
 PACKAGE = Path(__file__).resolve().parents[1]
 _scan_spec = importlib.util.spec_from_file_location('ai_sdlc_scan_coverage', PACKAGE/'scripts/scan_coverage.py')
 scan_coverage = importlib.util.module_from_spec(_scan_spec)
@@ -29,6 +29,11 @@ DEFAULTS = {'entrypoint': 'README.md', 'agent_policy': 'AGENTS.md',
             'status': 'docs/status.md'}
 BLOCK = re.compile(r'```harness-task\n(.*?)\n```', re.S)
 START, END = '<!-- harness:status:start -->', '<!-- harness:status:end -->'
+INPUT_CHANGE_LABELS = {
+    'file': '文件', 'file_mode': '执行权限', 'directory': '目录', 'environment': '环境',
+    'check': '检查定义', 'contract': '任务标准', 'confirmation': '授权来源',
+    'runner': '执行器', 'scan': '扫描覆盖', 'scan_runner': '扫描校验器', 'fingerprint': '输入指纹',
+}
 
 class HarnessError(Exception):
     pass
@@ -836,7 +841,7 @@ def input_files(root, directory):
 def fingerprints(root, c, t, cid):
     chk = c['checks'][cid]
     paths = set(chk['inputs']) | {c['authorities'][k] for k in ('requirements', 'validation', 'agent_policy')}
-    files = {}
+    files, file_modes = {}, {}
     for rel in sorted(paths):
         p = safe(root, rel)
         require(p.exists(), f'相关输入缺失: {rel}')
@@ -848,9 +853,10 @@ def fingerprints(root, c, t, cid):
         for x in members:
             safe(root, str(x.relative_to(root)))
             files[str(x.relative_to(root))] = digest(x.read_bytes())
+            file_modes[str(x.relative_to(root))] = x.stat().st_mode & 0o111
     environment = {'python': sys.version, 'platform': sys.platform}
     environment.update({k: digest(os.environ.get(k)) for k in chk.get('environment', [])})
-    result = {'files': files, 'environment': environment, 'check': digest(chk),
+    result = {'files': files, 'file_modes': file_modes, 'environment': environment, 'check': digest(chk),
             'contract': digest(contract(t)), 'confirmation': digest(c.get('confirmation_source')),
             'runner': digest(Path(__file__).read_bytes())}
     scan = scan_coverage.evaluate(root, task_path(root, t['id']))
@@ -923,6 +929,25 @@ def verify(root, c, tid, cid):
                 seal(root, run, rec)
                 rec['exit_code'] = proc.wait(timeout=chk.get('timeout', 300))
                 rec['overall_status'] = 'passed' if rec['exit_code'] == 0 else 'failed'
+                # A foreground check must finish its own group before sealing output.
+                try:
+                    os.killpg(proc.pid, 0)
+                except ProcessLookupError:
+                    group_finished = True
+                except OSError:
+                    # A failed probe (including EPERM) cannot establish completion.
+                    group_finished = False
+                else:
+                    group_finished = False
+                if not group_finished:
+                    rec['overall_status'] = 'running'
+                    rec['reason'] = 'descendants_after_parent_exit；本次进程组停止状态未知'
+                    cleanup_error = stop_process_group(proc)
+                    if cleanup_error is None:
+                        rec['overall_status'] = 'interrupted'
+                        rec['reason'] = 'descendants_after_parent_exit'
+                    else:
+                        rec['reason'] += '：' + cleanup_error
             except (subprocess.TimeoutExpired, KeyboardInterrupt) as exc:
                 reason = 'timeout' if isinstance(exc, subprocess.TimeoutExpired) else 'signal_or_interrupt'
                 rec['overall_status'] = 'running'
@@ -974,14 +999,15 @@ def fingerprint_changes(before, after):
     if not isinstance(before, dict):
         return [{'kind': 'fingerprint', 'name': 'inputs', 'change': 'unavailable'}]
     changes = []
-    for group in ('files', 'environment'):
+    for group in ('files', 'file_modes', 'environment'):
         old, new = before.get(group, {}), after.get(group, {})
         if not isinstance(old, dict):
             changes.append({'kind': 'fingerprint', 'name': group, 'change': 'unavailable'})
             continue
         for name in sorted(old.keys() | new.keys()):
             if name not in old or name not in new or old[name] != new[name]:
-                kind = 'directory' if group == 'files' and name.endswith('/') else ('file' if group == 'files' else 'environment')
+                kind = ('directory' if group == 'files' and name.endswith('/') else
+                        'file' if group == 'files' else 'file_mode' if group == 'file_modes' else 'environment')
                 changes.append({'kind': kind, 'name': name,
                                 'change': 'added' if name not in old else 'removed' if name not in new else 'modified'})
     for name in ('check', 'contract', 'confirmation', 'runner', 'scan', 'scan_runner'):
@@ -1036,11 +1062,7 @@ def assess_check(root, c, t, cid, directory, rec):
     except (HarnessError, OSError) as exc:
         gap = str(exc)
         if stage == 'inputs' and changes and gap == '相关输入变化，证据已失效':
-            labels = {'file': '文件', 'directory': '目录', 'environment': '环境',
-                      'check': '检查定义', 'contract': '任务标准', 'confirmation': '授权来源',
-                      'runner': '执行器', 'scan': '扫描覆盖', 'scan_runner': '扫描校验器',
-                      'fingerprint': '输入指纹'}
-            shown = '、'.join(f'{labels[x["kind"]]} {x["name"]}' for x in changes[:5])
+            shown = '、'.join(f'{INPUT_CHANGE_LABELS[x["kind"]]} {x["name"]}' for x in changes[:5])
             gap += f'；变化：{shown}'
             if len(changes) > 5:
                 gap += f' 等{len(changes)}项（完整清单见 diagnostics）'
@@ -1216,9 +1238,7 @@ def readable_assessment(assessment):
     evidence = {'missing': '缺失', 'valid': '有效', 'stale': '已失效', 'invalid': '损坏或不合格',
                 'unknown': '无法判定', 'unverified': '未验证'}
     humans = {'not_required': '不要求', 'pending': '待确认或需重新确认', 'recorded': '已记录确认（未核实来源真实性）'}
-    kinds = {'file': '文件', 'directory': '目录清单', 'environment': '环境', 'check': '检查定义',
-             'contract': '任务标准', 'confirmation': '授权来源', 'runner': '执行器', 'fingerprint': '输入指纹',
-             'scan': '扫描覆盖与引用', 'scan_runner': '扫描校验器'}
+    kinds = {**INPUT_CHANGE_LABELS, 'directory': '目录清单', 'scan': '扫描覆盖与引用'}
     changes = {'added': '新增', 'removed': '移除', 'modified': '变化', 'unavailable': '无法比较'}
     lines = ['交付机械条件：' + ('已满足' if assessment['conditions_met'] else '有缺口')]
     lines.extend('共同缺口：' + gap for gap in assessment['global_gaps'])

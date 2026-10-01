@@ -83,7 +83,9 @@ status不能与requirements、validation或agent_policy映射到同一实际文�
 
 计数来自实际测试框架。零测试、任何必需测试跳过、缺报告不通过。`kind=probe` 用于非测试的真实检查命令，以退出码和日志为证；不可用于绕过测试报告要求。验证命令直接执行 argv，不经过 shell；需 shell 的项目显式配置 shell 程序，并审阅副作用。
 
-目录输入递归包含指向项目内目录的符号链接及其文件；链接目标内容和文件增删都参与原有输入指纹。越界、失效或循环链接报告缺口，不静默漏掉依赖；本地目录和多个合法别名仍可使用。不把这项路径检查当作对恶意并发改写文件系统的沙箱隔离。
+目录输入递归包含指向项目内目录的符号链接及其文件；链接目标内容、文件执行权限位和文件增删都参与输入指纹。越界、失效或循环链接报告缺口，不静默漏掉依赖；本地目录和多个合法别名仍可使用。不把这项路径检查当作对恶意并发改写文件系统的沙箱隔离。
+
+文件执行权限位（owner/group/other的执行位）保存于输入指纹file_modes；撤销或改变相关执行位使证据失效，诊断定位文件及执行权限，不纳入mtime等无关属性。旧RUN的内容和schema不改写，缺新指纹或执行器变化按原有效性判定重验。
 
 ## 任务编号与文件命名
 
@@ -109,6 +111,8 @@ status不能与requirements、validation或agent_policy映射到同一实际文�
 begin 后唯一状态在 Markdown 的 `harness-task` 块。新任务使用 v2，并建立下述默认字段；未审阅状态不能通过 close。模板 records/task.md 的职责由同一数据块承载，正文仅补事实说明，不重复状态。脚本不会自动迁移非结构化历史。
 
 人工验收字段见 verification.md。RUN 位于 `.harness/evidence/TASK/RUN/`；新RUN使用schema_version=2，含 summary.json、output.log 与适用的 test-report.json。summary.json 的 receipt_sha256 校验其余字段的规范JSON内容，摘要与校验值单次原子替换；不再另写summary.sha256。旧RUN v1仍按summary.json原始字节及summary.sha256读取，不改历史原件。旧执行器不能消费新RUN v2，恢复/继续执行须使用支持该格式的版本；任务v2和配置v1不变。单文件替换避免拆分提交窗口，不承诺文件系统断电持久性或防篡改。交付检查结果在 `.harness/close/TASK/`。回执原样保留，不删除失败来取得通过。
+
+verify用于前台检查：父进程退出不足以证明整组结束。正常退出后如同组后代仍存在（或组状态无法确认），按下述有界方式停止；确认停止记录interrupted及reason=descendants_after_parent_exit，无法确认则保留running/停止状态未知，不得封存为passed。组长原退出码保留，不由停止后代反推其结果。需要持续运行的服务应在项目中明确启动/健康检查/停止的资源契约，不能用这个前台检查的组长退出码代替服务验收。
 
 超时/正常中断对本次子进程组先发SIGTERM，最多等待2秒；组仍存在时发送SIGKILL，再最多等待2秒确认，不因组长先退出而省略后代清理。确认组消失后记录interrupted及实际退出码；无法确认停止（包括清理被再次中断）时保留running、finished_at为空及停止状态未知的原因，后续成功不能消除此在途缺口，须现场核对后按reconcile-run追加处置。执行器被SIGKILL或机器断电时RUN也可能停在running。resume报告缺口，不能凭旧PID自动杀进程或重做。首版没有后台常驻服务；另建会话或进程组的外部操作不在本次进程组的清理范围内。
 
