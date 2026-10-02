@@ -23,6 +23,8 @@ def main():
         successful = result.wasSuccessful()
         counts.update(total=result.testsRun, failed=len(result.failures) + len(result.unexpectedSuccesses),
                       errors=len(result.errors), skipped=len(result.skipped))
+        if result.skipped:
+            counts['skipped_tests'] = [test.id() for test, _ in result.skipped]
     except (ImportError, OSError) as exc:
         print(f'无法发现测试: {exc}', file=sys.stderr)
         counts.update(total=1, errors=1)
@@ -30,7 +32,13 @@ def main():
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text(json.dumps(counts, indent=2)+'\n')
     print(json.dumps({'report':str(report), **counts}))
-    return 0 if successful and counts['total'] > 0 and not counts['skipped'] else 1
+    try:
+        optional = json.loads(os.environ.get('AI_PROJECT_HARNESS_OPTIONAL_TESTS', '[]'))
+        allowed = isinstance(optional, list) and all(isinstance(x, str) for x in optional)
+        allowed = allowed and set(counts.get('skipped_tests', [])) <= set(optional)
+    except ValueError:
+        allowed = False
+    return 0 if successful and counts['total'] > counts['skipped'] and allowed else 1
 
 if __name__=='__main__':
     sys.exit(main())

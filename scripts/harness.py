@@ -19,7 +19,7 @@ import fcntl
 import importlib.util
 from urllib.parse import unquote, urlsplit
 
-VERSION = '1.2.1-dev.2'
+VERSION = '1.3.0-dev.1'
 PACKAGE = Path(__file__).resolve().parents[1]
 _scan_spec = importlib.util.spec_from_file_location('ai_sdlc_scan_coverage', PACKAGE/'scripts/scan_coverage.py')
 scan_coverage = importlib.util.module_from_spec(_scan_spec)
@@ -154,19 +154,25 @@ def validate_config(root, c, check_ids=None):
             safe(root, path)
         require(isinstance(check.get('timeout', 300), (int, float)) and 0 < check.get('timeout', 300) <= 86400, f'{cid}: timeout 无效')
         require(isinstance(check.get('environment', []), list) and all(isinstance(x, str) and x for x in check.get('environment', [])), f'{cid}: environment 无效')
+        sections = check.get('rule_sections', {})
+        require(isinstance(sections, dict) and set(sections) <= {'requirements', 'validation', 'agent_policy'}, f'{cid}: rule_sections 职责无效')
+        for role, titles in sections.items():
+            require(isinstance(titles, list) and titles and all(isinstance(x, str) and x.strip() == x and x for x in titles)
+                    and len(set(titles)) == len(titles), f'{cid}: rule_sections.{role} 须为非空、不重复的精确标题数组')
+        optional = check.get('optional_tests', [])
+        require(isinstance(optional, list) and all(isinstance(x, str) and x and x.strip() == x for x in optional)
+                and len(set(optional)) == len(optional), f'{cid}: optional_tests 须为不重复的精确用例ID数组')
+        require(not optional or check['kind'] == 'tests', f'{cid}: optional_tests 仅用于tests检查')
     return c
 
 def placeholder(text):
     return bool(re.search(r'\[(?:待填写|待建立|真实路径|创建后|接入后|未确认)[^\]]*\]|\[TODO:', text))
 
-def markdown_targets(text):
-    """Extract common Markdown destinations and image flags, not render Markdown.
+def blank_markdown(value):
+    return re.sub(r'[^\n]', ' ', value)
 
-    Keep block/code exclusion separate from destination parsing so the same
-    targets drive resource existence and required-navigation checks.
-    """
-    def blank(value):
-        return re.sub(r'[^\n]', ' ', value)
+def markdown_structure(text, preserve_inline=False):
+    """Mask examples/comments without letting their literals consume real text."""
 
     # Exclusions share source order: fences in comments and comments in code
     # cannot consume real Markdown following the enclosing construct.
@@ -177,31 +183,37 @@ def markdown_targets(text):
             line_end = body.find('\n', i)
             line_end = len(body) if line_end < 0 else line_end + 1
             line = body[i:line_end]
-            marker = re.match(r'^ {0,3}(`{3,}|~{3,})(.*)$', line.rstrip('\n'))
+            marker = re.match(r'^ {0,3}(`{3,}|~{3,})(.*)$', line.rstrip('\r\n'))
             if marker and not (marker[1][0] == '`' and '`' in marker[2]):
                 closing = re.compile(r'^ {0,3}' + re.escape(marker[1][0]) +
-                                     '{' + str(len(marker[1])) + r',}[ \t]*$', re.M)
+                                     '{' + str(len(marker[1])) + r',}[ \t]*\r?$', re.M)
                 close = closing.search(body, line_end)
                 end = close.end() if close else len(body)
-                cleaned.append(blank(body[i:end])); i = end
+                cleaned.append(blank_markdown(body[i:end])); i = end
                 continue
             if line.startswith(('    ', '\t')):
-                cleaned.append(blank(line)); i = line_end
+                cleaned.append(blank_markdown(line)); i = line_end
                 continue
         if body[i] == '\\' and i + 1 < len(body):
             cleaned.append(body[i:i+2]); i += 2
         elif body.startswith('<!--', i):
             end = body.find('-->', i + 4)
             end = len(body) if end < 0 else end + 3
-            cleaned.append(blank(body[i:end])); i = end
+            cleaned.append(blank_markdown(body[i:end])); i = end
         elif body[i] == '`':
             run = re.match(r'`+', body[i:])[0]
             close = re.search(r'(?<!`)' + run + r'(?!`)', body[i+len(run):])
             end = i + len(run) + close.end() if close else i + len(run)
-            cleaned.append(blank(body[i:end]) if close else body[i:end]); i = end
+            literal = body[i:end]
+            keep = not close or (preserve_inline and '\n' not in literal)
+            cleaned.append(literal if keep else blank_markdown(literal)); i = end
         else:
             cleaned.append(body[i]); i += 1
-    body = ''.join(cleaned)
+    return ''.join(cleaned)
+
+def markdown_targets(text):
+    """Extract common Markdown destinations and image flags, not render Markdown."""
+    body = markdown_structure(text)
 
     def unescape(value):
         return html.unescape(re.sub(r'\\([!"#$%&\'()*+,\-./:;<=>?@\[\]\\^_`{|}~])', r'\1', value))
@@ -255,7 +267,7 @@ def markdown_targets(text):
         parsed = destination(match[2], 0, False)
         if parsed:
             definitions.setdefault(label(match[1]), parsed[0])
-            return blank(match[0])
+            return blank_markdown(match[0])
         return match[0]
     body = re.sub(pattern, definition, body, flags=re.M)
     def scan(body):
@@ -327,6 +339,11 @@ def doctor(root, c, check_ids=None):
         for rel in c['checks'][cid]['inputs']:
             if not safe(root, rel).exists():
                 gaps.append(f'{cid}: 输入缺失: {rel}')
+        for role, titles in c['checks'][cid].get('rule_sections', {}).items():
+            try:
+                rule_sections(safe(root, c['authorities'][role]), titles)
+            except (HarnessError, OSError, UnicodeError) as exc:
+                gaps.append(f'{cid}: {role} 章节不可用: {exc}')
     navigation = {}
     for rel in set(c['authorities'].values()):
         p = safe(root, rel)
@@ -838,9 +855,51 @@ def input_files(root, directory):
     return sorted(files)
 
 
+def rule_sections(path, titles):
+    """Select exact ATX sections, retaining source bytes and rejecting ambiguity."""
+    text = path.read_bytes().decode('utf-8')
+    lines, headings = text.splitlines(keepends=True), []
+    for i, line in enumerate(markdown_structure(text, preserve_inline=True).splitlines()):
+        heading = re.fullmatch(r' {0,3}(#{1,6})[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*', line)
+        if heading:
+            headings.append((i, len(heading[1]), heading[2].strip()))
+    ranges = []
+    for title in titles:
+        matches = [h for h in headings if h[2] == title]
+        require(len(matches) == 1, f'规则章节缺失或重名: {path.name} / {title}')
+        start, level, _ = matches[0]
+        end = next((pos for pos, depth, _ in headings if pos > start and depth <= level), len(lines))
+        ranges.append(''.join(lines[start:end]))
+    return '\n'.join(ranges).encode()
+
+def test_counts_pass(counts, chk):
+    require(isinstance(counts, dict), '计数报告必须是 JSON 对象')
+    require(all(type(counts.get(k)) is int and counts[k] >= 0 for k in ('total', 'failed', 'errors', 'skipped')), '计数报告字段无效')
+    require(counts['failed'] + counts['errors'] + counts['skipped'] <= counts['total'], '计数报告不一致')
+    require(counts['total'] > counts['skipped'] and counts['failed'] == 0 and counts['errors'] == 0, '零测试、全跳过、失败或异常不能通过')
+    if counts['skipped']:
+        skipped = counts.get('skipped_tests')
+        require(isinstance(skipped, list) and all(isinstance(x, str) and x for x in skipped)
+                and len(skipped) == counts['skipped'] and len(set(skipped)) == len(skipped), '跳过用例身份缺失或与计数不一致')
+        require(set(skipped) <= set(chk.get('optional_tests', [])), '存在未预先列为可选的必需测试跳过')
+    elif 'skipped_tests' in counts:
+        require(counts['skipped_tests'] == [], '跳过用例身份与零跳过计数不一致')
+
 def fingerprints(root, c, t, cid):
     chk = c['checks'][cid]
     paths = set(chk['inputs']) | {c['authorities'][k] for k in ('requirements', 'validation', 'agent_policy')}
+    explicit = set()
+    for rel in chk['inputs']:
+        p = safe(root, rel)
+        explicit.update(x.resolve() for x in (input_files(root, p) if p.is_dir() else [p]))
+    scoped = {}
+    for role in ('requirements', 'validation', 'agent_policy'):
+        path = safe(root, c['authorities'][role]).resolve()
+        titles = chk.get('rule_sections', {}).get(role)
+        if path not in scoped:
+            scoped[path] = titles
+        elif scoped[path] is not None:
+            scoped[path] = sorted(set(scoped[path]) | set(titles)) if titles is not None else None
     files, file_modes = {}, {}
     for rel in sorted(paths):
         p = safe(root, rel)
@@ -852,7 +911,8 @@ def fingerprints(root, c, t, cid):
             members = [p]
         for x in members:
             safe(root, str(x.relative_to(root)))
-            files[str(x.relative_to(root))] = digest(x.read_bytes())
+            titles = scoped.get(x.resolve()) if x.resolve() not in explicit else None
+            files[str(x.relative_to(root))] = digest(rule_sections(x, titles) if titles else x.read_bytes())
             file_modes[str(x.relative_to(root))] = x.stat().st_mode & 0o111
     environment = {'python': sys.version, 'platform': sys.platform}
     environment.update({k: digest(os.environ.get(k)) for k in chk.get('environment', [])})
@@ -917,6 +977,7 @@ def verify(root, c, tid, cid):
         seal(root, run, rec)
     env = os.environ.copy()
     env['AI_PROJECT_HARNESS_REPORT'] = str(safe(root, run + '/test-report.json'))
+    env['AI_PROJECT_HARNESS_OPTIONAL_TESTS'] = json.dumps(chk.get('optional_tests', []))
     proc = None
     def interrupted(signum, frame):
         raise KeyboardInterrupt
@@ -972,9 +1033,12 @@ def verify(root, c, tid, cid):
                 rec['counts'] = counts
                 if (counts['total'] == 0 or counts['skipped'] == counts['total']) and rec['exit_code'] == 0:
                     rec['overall_status'] = 'skipped'
-                elif counts['failed'] or counts['errors'] or counts['skipped']:
-                    rec['overall_status'] = 'failed'
-                    rec['reason'] = '存在失败、异常或未覆盖的必需测试'
+                else:
+                    try:
+                        test_counts_pass(counts, chk)
+                    except HarnessError as exc:
+                        rec['overall_status'] = 'failed'
+                        rec['reason'] = str(exc)
                 rec['report_sha256'] = digest(safe(root, run + '/test-report.json').read_bytes())
             except HarnessError as exc:
                 rec['overall_status'] = 'error'
@@ -1056,7 +1120,7 @@ def assess_check(root, c, t, cid, directory, rec):
         if c['checks'][cid]['kind'] == 'tests':
             stage = 'counts'
             counts = rec.get('counts') or {}
-            require(counts.get('total', 0) > 0 and all(counts.get(k) == 0 for k in ('failed', 'errors', 'skipped')), '必需测试计数未通过')
+            test_counts_pass(counts, c['checks'][cid])
             stage = 'report'
             require(digest((directory/'test-report.json').read_bytes()) == rec.get('report_sha256'), '测试计数报告损坏')
     except (HarnessError, OSError) as exc:

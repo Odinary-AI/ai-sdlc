@@ -87,6 +87,23 @@ status不能与requirements、validation或agent_policy映射到同一实际文�
 
 文件执行权限位（owner/group/other的执行位）保存于输入指纹file_modes；撤销或改变相关执行位使证据失效，诊断定位文件及执行权限，不纳入mtime等无关属性。旧RUN的内容和schema不改写，缺新指纹或执行器变化按原有效性判定重验。
 
+### 可选规则章节与测试范围
+
+检查配置可增加以下字段，均不要求已有项目填写：
+
+```json
+{
+  "rule_sections": {"requirements": ["验收标准"]},
+  "optional_tests": ["test_invoice.Tests.test_platform"]
+}
+```
+
+`rule_sections`仅接受requirements、validation、agent_policy职责，值为非空、不重复的精确标题数组。支持Markdown ATX标题（`#`至`######`），章节包含标题及其子章节，到下一同级或更高标题结束；代码围栏、缩进代码、多行代码跨度和HTML注释中的标题不作选择对象；行内代码中的注释字面量不影响后续真实标题，标题本身的单行行内代码按字面名称选择。不支持Setext标题、锚点、正则或自动语义等价；标题缺失或同名多处出现时阻塞，先修映射。未配置职责、无法明确相关规则时保持整文件校验；同一文件映射多个职责时取章节并集，其中任一职责未裁剪则整文件绑定。显式inputs中的文件或目录成员始终整文件绑定，包括同目标的合法别名；裁剪不能排除实际代码/资源输入。选择依据按已有配置维护记录说明，不能漏掉相关共同约束。检查定义和选择变化使旧RUN失效，不用裁剪恢复旧成功。
+
+`optional_tests`仅用于tests检查，是执行前已确认可选或平台限定用例的精确ID数组，不支持通配符、数量配额或事后豁免。未配置时所有跳过仍阻塞。有跳过且配置可选范围时，原始报告须增加`skipped_tests`字符串数组，列全部跳过用例的实际ID，长度等于skipped、无重复，全部在optional_tests中才允许；failed/errors必须为0且total大于skipped。失败或异常的可选用例仍不通过；零测试、全跳过、身份缺失/错误及进程失败不能通过。报告计数不减去可选项，日志、报告和范围均保留；自建适配器自行按相同契约接入，不改用probe绕过。
+
+verify向检查进程注入`AI_PROJECT_HARNESS_OPTIONAL_TESTS`，值为当前检查optional_tests的JSON数组，覆盖继承环境中的同名值；随包unittest适配器据此保留跳过身份并判断退出码。环境变量本身不授权，交付时仍按检查配置和原始回执核对。配置schema_version仍为1，任务及RUN格式不变；这两项能力需1.3.0或之后的执行器，旧版本不提供章节/可选范围语义，不用旧工具继续相关任务。
+
 ## 任务编号与文件命名
 
 新建任务统一使用递增数字 ID，从 `TASK-001` 开始，不足三位补零；超过 `999` 后自然增加位数，例如 `TASK-1000`。接入已有项目时核对已有任务和编号，避免重复或复用已使用的编号。任务文件名与 ID 一致，例如 `docs/tasks/TASK-001.md`；任务名称写在正文标题中，不追加到文件名。
@@ -118,7 +135,7 @@ verify用于前台检查：父进程退出不足以证明整组结束。正常�
 
 ## unittest 计数适配器
 
-标准 unittest 项目可复用本包 `scripts/unittest_report.py`。在项目检查的 argv 中配置 `["python3", "该适配器的实际路径", "--start", "tests", "--pattern", "test_*.py"]`，kind 为 tests。适配器从当前项目目录发现并真实运行测试，保存计数；沿用框架的成功判定，预期失败用例的意外成功（unexpected success）计入 failed，零测试和跳过也非通过。可在授权内将适配器复制到项目 scripts 并把它加入 inputs，便于脱离 Skill 安装目录继续运行。
+标准 unittest 项目可复用本包 `scripts/unittest_report.py`。在项目检查的 argv 中配置 `["python3", "该适配器的实际路径", "--start", "tests", "--pattern", "test_*.py"]`，kind 为 tests。适配器从当前项目目录发现并真实运行测试，保存计数；沿用框架的成功判定，预期失败用例的意外成功（unexpected success）计入 failed，零测试、全跳过及未预先列为可选的跳过非通过。有跳过时报告附真实skipped_tests；可选范围及执行器注入环境见上节。可在授权内将适配器复制到项目 scripts 并把它加入 inputs，便于脱离 Skill 安装目录继续运行。
 
 输出位置依次取环境变量 `AI_PROJECT_HARNESS_REPORT`、`--report`，均未指定时在当前目录的 `.harness/reports/` 下生成唯一文件名。指定路径已有文件会被替换；仅将固定可再生产物用于重复输出，保留历史证据时使用新路径。verify 为每次执行注入独立 RUN 内的报告路径，优先于 `--report`。
 
