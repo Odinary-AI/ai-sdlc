@@ -17,6 +17,25 @@
 
 ## 执行与维护
 
+SC-02的生态识别先交叉核对锁文件、实际安装脚本及运行时入口。例如在相关目录用`rg --files -g '*lock*' -g '*requirements*' -g 'pyproject.toml' -g 'package.json'`定位声明，再用`rg -n 'pip|python|npm|pnpm|spawn|exec' scripts package.json`追查安装及子进程入口（路径按项目实际替换）。npm锁文件之外，文档处理安装脚本可能建立私有Python环境；开发Node与Electron内置Node也需分开。搜索只是线索，须沿具名入口确认所加载的生态，不建设统一扫描器或每次全仓检索。
+
+已核对可信依赖后，可在实际文档处理进程使用的Python环境执行下面的只读探针；`pypdf`仅为示例包，换成项目实际模块。将输出与本次锁文件/安装来源对应；分发元数据、模块版本和加载路径不一致时保留差异，不能只凭刚修改的requirements宣称升级已生效。
+
+```python
+# example: python-loaded-dependency
+import importlib
+import importlib.metadata
+import json
+import sys
+
+module = importlib.import_module("pypdf")
+print(json.dumps({"python": sys.version, "executable": sys.executable,
+                  "distribution_version": importlib.metadata.version("pypdf"),
+                  "module_version": module.__version__, "module_path": module.__file__}))
+```
+
+每种适用生态分别保留检查对象（声明版本或实际加载版本）、查询/执行时间、漏洞库或公告更新时间、覆盖及缺口。npm零命中不能说明Python零命中；Python未查就是未知。已查两生态也不证明系统组件或未知漏洞安全。历史OSV结果只支持当时指定版本与数据时间，不倒推更早状态或替代今日查询。按相关依赖变化、信息新鲜度与本次结论选择现有检查，不机械要求每次联网、多查一个服务或执行安装脚本。
+
 工具按项目技术栈与风险选择，优先复用现有秘密扫描、依赖检查、静态分析及行为测试；精确命令、范围和新鲜度要求归项目验证来源。测试发现和语义审阅互补，不强制安装特定产品或上传源码。主动扫描线上、付费服务或有副作用的测试必须沿用相应授权及隔离边界。
 
 结果在任务正文关联SC条目、对象、证据、限制及处置，复用设计和验证专项已有效证据。问题按maintenance分级，误报或暂缓有依据与复查条件；不得自行接受超出授权的风险，也不能用临时关闭防护取得通过。复验覆盖相关拒绝行为与合法使用，后续变更或新漏洞信息按影响重核证据。
