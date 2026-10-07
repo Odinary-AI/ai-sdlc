@@ -2,20 +2,20 @@
 name: ai-sdlc
 description: Explicitly invoked project engineering mechanism for individual developers and one-person companies. Adopt a project, execute or resume an authorized task, inspect and clean project files, carry out integrated project governance, and check evidence-backed delivery. Invoke only when the user explicitly requests this skill; ordinary discussion does not authorize adoption.
 metadata:
-  version: "1.4.0-dev.1"
+  version: "1.4.0-dev.2"
 ---
 
 # AI工程机制
 
 为 AI 开发配备系统化的工程流程和工具，引导、激发并监督 AI 有序、完整、高质量地执行项目开发过程，旨在将 AI 的个体能力组织成持续、可靠的项目交付能力，服务个人开发者和一人公司（OPC）。完整指当前范围内适用职责不遗漏；具体方法由 AI 在授权与项目约束内选择。
 
-用户显式调用后，在当前授权任务内持续执行适用步骤，不要求用户逐条提醒。新会话读取项目入口恢复事实；Skill 加载与已采纳项目规则的生效边界见[任务流程](references/lifecycle.md#模式与生效边界)。
+用户显式调用后，在当前授权任务内持续执行适用步骤，不要求用户逐条提醒。新会话沿[项目接手与任务恢复](references/lifecycle.md#项目接手与任务恢复)定位事实；Skill 加载与已采纳项目规则的生效边界见[任务流程](references/lifecycle.md#模式与生效边界)。
 
 ## 选择当前工作
 
 - **接入项目**：读取 [接入说明](references/adoption.md)及[默认目录规则](references/project-layout.md)，检查现有规则和文件，建立缺失的必要内容及项目映射。
 - **目录检查与清理**：用户要求检查目录、多余文件或清理项目时，读取[目录检查与清理入口](references/project-layout.md#目录检查与清理入口)，主动调查内容与归属，判断归类/删除/保留/待核实，按授权处置、同步有效消费者并核对完成范围；只读请求不执行移动或删除，不默认升级为完整治理。
-- **执行或恢复任务**：读取 [任务流程](references/lifecycle.md)，沿用项目的文档或脚本模式，采用任务记录、比例验证、实际结果与中断交接；在关键实现前核对反馈是否够用，反馈不足、原因不明或反复修复时按其中的[反馈与诊断](references/lifecycle.md#反馈与诊断)推进。
+- **执行或恢复任务**：从[项目接手与任务恢复](references/lifecycle.md#项目接手与任务恢复)进入，按其中路由沿项目的文档或脚本模式继续；在关键实现前核对反馈是否够用，反馈不足、原因不明或反复修复时按其中的[反馈与诊断](references/lifecycle.md#反馈与诊断)推进。
 - **检查交付或维护机制**：读取 [验证与能力边界](references/verification.md)，核对相关证据、语义审阅与待人事项。
 - **项目综合治理**：用户要求“治理项目”等整合工作时，读取 [综合治理入口](references/maintenance.md#项目综合治理入口)，先基于现状形成统一方案，再沿授权完成检查、修复、治理体系回顾与按需更新、复验和交付；全面治理在收尾时按该流程建立或刷新项目导览页。
 - **阶段回顾与治理更新**：用户要求“治理体系更新”“治理规则更新”“阶段复盘”或“经验沉淀”时，读取 [回顾与更新入口](references/maintenance.md#阶段回顾与治理更新入口)，按范围回顾过程、提炼经验并依授权维护项目文件。
