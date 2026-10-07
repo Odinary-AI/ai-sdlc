@@ -19,7 +19,7 @@ import fcntl
 import importlib.util
 from urllib.parse import unquote, urlsplit
 
-VERSION = '1.3.0-dev.2'
+VERSION = '1.4.0-dev.1'
 PACKAGE = Path(__file__).resolve().parents[1]
 _scan_spec = importlib.util.spec_from_file_location('ai_sdlc_scan_coverage', PACKAGE/'scripts/scan_coverage.py')
 scan_coverage = importlib.util.module_from_spec(_scan_spec)
@@ -956,39 +956,19 @@ def stop_process_group(proc):
     except (OSError, KeyboardInterrupt) as exc:
         return str(exc) or '清理被再次中断'
 
-def verify(root, c, tid, cid):
-    identifier(cid)
-    t, _ = read_task(root, tid)
-    validate_task(t, c)
-    require(t['schema_version'] == 2, '旧任务继续执行前须 migrate-task')
-    require(t['state'] == 'in_progress',
-            f'任务须为进行中；暂停或结束后先显式恢复并核对范围；核对现场后运行 resume {tid} --activate，再执行 verify')
-    require(cid in {x for ac in t['acceptance'] for x in ac['checks']}, '检查不在当前任务验收范围')
-    chk = c['checks'][cid]
-    initial = fingerprints(root, c, t, cid)
-    runid = dt.datetime.now(dt.timezone.utc).strftime('RUN-%Y%m%dT%H%M%S%f-') + uuid.uuid4().hex[:8]
-    run = f'.harness/evidence/{tid}/{runid}'
-    rec = {'schema_version': 2, 'task_id': tid, 'run_id': runid, 'check_id': cid,
-           'started_at': now(), 'finished_at': None, 'argv': chk['argv'], 'cwd': str(root),
-           'overall_status': 'running', 'verification_status': 'unverified', 'exit_code': None,
-           'inputs': initial, 'validity': 'indeterminate', 'counts': None, 'reason': '', 'pid': os.getpid()}
-    with lock(root):
-        safe(root, run).mkdir(parents=True, exist_ok=False)
-        seal(root, run, rec)
-    env = os.environ.copy()
-    env['AI_PROJECT_HARNESS_REPORT'] = str(safe(root, run + '/test-report.json'))
-    env['AI_PROJECT_HARNESS_OPTIONAL_TESTS'] = json.dumps(chk.get('optional_tests', []))
+def execute_process(root, argv, env, timeout, logpath, rec, on_started):
+    """Shared foreground process lifecycle for checks and dependent actions."""
     proc = None
     def interrupted(signum, frame):
         raise KeyboardInterrupt
     previous = signal.signal(signal.SIGTERM, interrupted)
     try:
-        with safe(root, run + '/output.log').open('wb') as log:
+        with logpath.open('wb') as log:
             try:
-                proc = subprocess.Popen(chk['argv'], cwd=root, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+                proc = subprocess.Popen(argv, cwd=root, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
                 rec['child_pid'] = proc.pid
-                seal(root, run, rec)
-                rec['exit_code'] = proc.wait(timeout=chk.get('timeout', 300))
+                on_started(rec)
+                rec['exit_code'] = proc.wait(timeout=timeout)
                 rec['overall_status'] = 'passed' if rec['exit_code'] == 0 else 'failed'
                 # A foreground check must finish its own group before sealing output.
                 try:
@@ -1021,9 +1001,44 @@ def verify(root, c, tid, cid):
                         rec['reason'] = reason
                     else:
                         rec['reason'] += '：' + cleanup_error
-            except OSError as exc:
+            except (OSError, HarnessError) as exc:
                 rec['overall_status'] = 'error'
                 rec['reason'] = str(exc)
+                if proc is not None:
+                    cleanup_error = stop_process_group(proc)
+                    rec['exit_code'] = proc.returncode
+                    if cleanup_error is not None:
+                        rec['overall_status'] = 'running'
+                        rec['reason'] += '；停止状态未知：' + cleanup_error
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+
+
+def verify(root, c, tid, cid):
+    identifier(cid)
+    t, _ = read_task(root, tid)
+    validate_task(t, c)
+    require(t['schema_version'] == 2, '旧任务继续执行前须 migrate-task')
+    require(t['state'] == 'in_progress',
+            f'任务须为进行中；暂停或结束后先显式恢复并核对范围；核对现场后运行 resume {tid} --activate，再执行 verify')
+    require(cid in {x for ac in t['acceptance'] for x in ac['checks']}, '检查不在当前任务验收范围')
+    chk = c['checks'][cid]
+    initial = fingerprints(root, c, t, cid)
+    runid = dt.datetime.now(dt.timezone.utc).strftime('RUN-%Y%m%dT%H%M%S%f-') + uuid.uuid4().hex[:8]
+    run = f'.harness/evidence/{tid}/{runid}'
+    rec = {'schema_version': 2, 'task_id': tid, 'run_id': runid, 'check_id': cid,
+           'started_at': now(), 'finished_at': None, 'argv': chk['argv'], 'cwd': str(root),
+           'overall_status': 'running', 'verification_status': 'unverified', 'exit_code': None,
+           'inputs': initial, 'validity': 'indeterminate', 'counts': None, 'reason': '', 'pid': os.getpid()}
+    with lock(root):
+        safe(root, run).mkdir(parents=True, exist_ok=False)
+        seal(root, run, rec)
+    env = os.environ.copy()
+    env['AI_PROJECT_HARNESS_REPORT'] = str(safe(root, run + '/test-report.json'))
+    env['AI_PROJECT_HARNESS_OPTIONAL_TESTS'] = json.dumps(chk.get('optional_tests', []))
+    try:
+        execute_process(root, chk['argv'], env, chk.get('timeout', 300),
+                        safe(root, run + '/output.log'), rec, lambda value: seal(root, run, value))
         if chk['kind'] == 'tests' and rec['overall_status'] in ('passed', 'failed'):
             try:
                 counts = load(safe(root, run + '/test-report.json'))
@@ -1051,12 +1066,81 @@ def verify(root, c, tid, cid):
             rec['reason'] += str(exc)
         rec['verification_status'] = 'verified' if rec['overall_status'] == 'passed' and rec['validity'] == 'valid' else 'unverified'
     finally:
-        signal.signal(signal.SIGTERM, previous)
         rec['finished_at'] = None if rec['overall_status'] == 'running' else now()
         logpath = safe(root, run + '/output.log')
         rec['log_sha256'] = digest(logpath.read_bytes()) if logpath.exists() else None
         seal(root, run, rec)
     return {'run': run, **rec}
+
+def run_after(root, c, tid, checks, argv, timeout=300):
+    """Optional fresh-check chain. Authorization and sufficient scope remain caller duties."""
+    require(isinstance(checks, list) and checks and len(set(checks)) == len(checks),
+            '须显式选择非空且不重复的检查范围')
+    require(argv and all(isinstance(x, str) and x for x in argv), '依赖动作 argv 不能为空')
+    require(isinstance(timeout, (int, float)) and 0 < timeout <= 86400, '动作 timeout 无效')
+    t, _ = read_task(root, tid)
+    validate_task(t, c)
+    require(t['schema_version'] == 2, '旧任务继续执行前须 migrate-task')
+    require(t['state'] == 'in_progress', '任务须为进行中；先核对现场再恢复')
+    for cid in checks:
+        identifier(cid)
+        require(cid in task_check_ids(t), f'检查不在当前任务验收范围: {cid}')
+    # Existing unknown execution must be reconciled, not hidden by a new successful RUN.
+    base = safe(root, f'.harness/evidence/{tid}')
+    for directory in sorted(base.iterdir()) if base.exists() else []:
+        if not directory.is_dir():
+            continue
+        resolution = resolved_run(root, tid, directory.name, directory/'summary.json')
+        if resolution and resolution.get('kind') == 'damaged':
+            continue
+        old = read_run(root, tid, directory)
+        require(old.get('overall_status') != 'running' or resolution is not None,
+                f'{directory.name}: 在途结局未知，先核对现场并 reconcile-run')
+    action = f'.harness/actions/{tid}/ACTION-' + uuid.uuid4().hex
+    path = safe(root, action)
+    path.mkdir(parents=True, exist_ok=False)
+    rec = {'task_id': tid, 'argv': argv, 'cwd': str(root), 'checks': [],
+           'started_at': now(), 'finished_at': None, 'action_started': False,
+           'overall_status': 'checking', 'exit_code': None, 'reason': ''}
+    def save():
+        write_json(path/'summary.json', rec)
+    save()
+    try:
+        for cid in checks:
+            # Reload definitions and task before each check; never silently broaden selection.
+            current, _ = read_task(root, tid)
+            current_c = config(root, task_check_ids(current))
+            run = verify(root, current_c, tid, cid)
+            rec['checks'].append({'check_id': cid, 'run': run['run']})
+            save()
+            require(run['verification_status'] == 'verified', f'{cid}: 本次检查失败或未知；依赖动作未启动')
+        current, _ = read_task(root, tid)
+        current_c = config(root, task_check_ids(current))
+        validate_task(current, current_c)
+        require(current['state'] == 'in_progress', '任务状态变化；依赖动作未启动')
+        for item in rec['checks']:
+            require(item['check_id'] in task_check_ids(current), '任务检查范围变化')
+            directory = safe(root, item['run'])
+            run = read_run(root, tid, directory)
+            require(run.get('check_id') == item['check_id'], 'RUN 检查对象不匹配')
+            detail, gap = assess_check(root, current_c, current, item['check_id'], directory, run)
+            require(detail['conditions_met'], f'{item["check_id"]}: {gap}；依赖动作未启动')
+        rec['overall_status'] = 'running'
+        save()  # Persist intent before launch. Crash here requires inspecting the action, not replaying.
+        def started(value):
+            rec['action_started'] = True
+            save()
+        execute_process(root, argv, os.environ.copy(), timeout, path/'output.log', rec, started)
+    except (HarnessError, OSError, ValueError, TypeError, KeyError) as exc:
+        rec['overall_status'] = 'blocked' if not rec['action_started'] else 'error'
+        rec['reason'] = str(exc)
+    finally:
+        rec['finished_at'] = None if rec['overall_status'] == 'running' else now()
+        logpath = path/'output.log'
+        rec['log_sha256'] = digest(logpath.read_bytes()) if logpath.exists() else None
+        save()
+    return {'action': action, **rec}
+
 
 def fingerprint_changes(before, after):
     """Explain identity changes without returning values (including env hashes)."""
@@ -1354,6 +1438,10 @@ def main(argv=None):
     sub.add_parser('doctor', help='检查接入、配置、真实内容与引用')
     p = sub.add_parser('begin', help='从 JSON 规格建立唯一任务记录'); p.add_argument('--spec', required=True)
     p = sub.add_parser('verify', help='实际执行项目配置的检查并保存独立 RUN'); p.add_argument('task'); p.add_argument('check')
+    p = sub.add_parser('run-after', help='本次指定检查全部有效后执行已授权动作；可选且不授予权限')
+    p.add_argument('task'); p.add_argument('--check', action='append', required=True)
+    p.add_argument('--timeout', type=float, default=300, help='依赖动作超时秒数')
+    p.add_argument('--action', dest='argv', nargs=argparse.REMAINDER, required=True, help='最后传入动作 argv，无隐式 shell')
     p = sub.add_parser('close', help='重新核对交付条件；可据实标记完成'); p.add_argument('task'); p.add_argument('--complete', action='store_true'); p.add_argument('--review-source', help='项目内已有的非空审阅文件路径，可引用任务正文；不是会话原话')
     p.add_argument('--format', choices=['json','text'], default='json', help='文本验收视图或完整 JSON；不改变判定与命令副作用')
     p = sub.add_parser('pause', help='保存中断状态及下一动作'); p.add_argument('task'); p.add_argument('--next', required=True)
@@ -1380,6 +1468,8 @@ def main(argv=None):
             elif a.command == 'migrate-task': result = migrate_task(root, c, a.task, a.apply)
             elif a.command == 'update': result = update_task(root, c, a.task, load(Path(a.spec)))
             elif a.command == 'verify': result = verify(root, c, a.task, a.check)
+            elif a.command == 'run-after':
+                result = run_after(root, c, a.task, a.check, a.argv, a.timeout)
             elif a.command == 'close': result = close(root, c, a.task, a.complete, a.review_source)
             elif a.command == 'reconcile-run': result = reconcile_run(root, c, a.task, a.run, a.outcome, a.source, a.damaged)
             elif a.command == 'sync-status': result = sync_status(root, c, a.task)
@@ -1400,6 +1490,7 @@ def main(argv=None):
         else:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         if a.command == 'verify': return 0 if result['verification_status'] == 'verified' else 1
+        if a.command == 'run-after': return 0 if result['overall_status'] == 'passed' else 1
         if a.command == 'close': return 0 if result['conditions_met'] else 1
         if a.command == 'doctor': return 0 if result['ready'] else 1
         return 0

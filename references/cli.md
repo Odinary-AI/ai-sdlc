@@ -9,6 +9,7 @@ Python 3.10+，macOS/Linux，标准库。以下 `H` 表示本 Skill 的 `scripts
 | `python3 H --root PROJECT doctor` | 配置、必要文件、占位符和真实链接检查 |
 | `python3 H --root PROJECT begin --spec task.json` | 创建 docs/tasks/任务ID.md 和状态入口摘要 |
 | `python3 H --root PROJECT verify TASK-001 unit` | 执行该任务所需的 unit 检查，保存独立 RUN |
+| `python3 H --root PROJECT run-after TASK-001 --check unit --action python3 package.py` | 可选：本次指定检查全部有效后执行已授权动作 |
 | `python3 H --root PROJECT pause TASK-001 --next '核对在途操作后继续'` | 记录中断与下一动作，不代表停止外部服务 |
 | `python3 H --root PROJECT resume TASK-001` | 新进程读取任务、证据、缺口与下一动作；无命令重放 |
 | `python3 H --root PROJECT resume TASK-001 --format text` | 中文摘要展示同一任务、证据及下一动作；默认仍为 JSON |
@@ -19,6 +20,22 @@ Python 3.10+，macOS/Linux，标准库。以下 `H` 表示本 Skill 的 `scripts
 | `python3 H --root PROJECT close TASK-001` | 核对当前交付条件并保存检查结果，不自动标完成 |
 | `python3 H --root PROJECT close TASK-001 --format text` | 用中文展示同一验收、检查和证据判定；仍保存交付回执 |
 | `python3 H --root PROJECT close TASK-001 --complete --review-source docs/review.md` | 引用真实语义审阅，条件满足时完成，否则阻塞并列缺口 |
+
+## 可选条件衔接
+
+`run-after`是1.4.0起的可选组合入口，不是任务完成判定或统一交付门。`--check ID`可重复，必须非空、不重复且属于当前进行中v2任务的验收范围；未知ID、缺输入或坏配置明确失败，不回退到全部检查或空范围。可选择本次依赖所需的子集，任务close仍核对全部必需验收。检查命令、inputs、rule_sections、optional_tests及判据沿现有配置，不增加统一套件。检查充分性、例外理由和授权真实性由AI/人核对，不能失败后换范围来放行同一义务。
+
+```sh
+python3 H --root PROJECT run-after TASK-001 --check unit --check source-format --timeout 60 --action git commit -m '已授权的本地修改'
+```
+
+`--action`必须最后出现，其后全部按动作argv传递，cwd为PROJECT，无隐式shell；需要shell时只能显式传入已审阅的shell命令。`--timeout`是动作超时秒数（默认300，大于0且不超过86400）；各检查仍用自身timeout。probe沿可靠退出契约，tests沿已有计数协议，其他报告协议由项目适配器校验并提供可靠退出，普通命令不强制JSON。
+
+每次新执行指定检查，失败、超时、异常、未知或无效报告立即停止。完成后重新读取本次全部RUN并沿assess_check核对回执、日志、报告及输入；后一个检查改变前一个相关输入仍阻止动作，不找旧成功替代。已有未知在途RUN或损坏未处置回执须先沿既有恢复流程核对。无关变化及有效章节裁剪不自动失效。程序只能识别已映射依赖，漏映射的动作脚本、暂存对象或运行环境不会自动被发现；例如git commit前须将实际暂存对象身份纳入项目适用的检查/输入，不能把工作树通过自动称为暂存内容通过。
+
+链条观察保存在`.harness/actions/TASK-ID/ACTION-ID/summary.json`，列调用argv、指定检查的本次RUN、起止时间、是否已启动动作、状态/退出码及原因；动作启动后另有output.log和日志散列。这是执行观察，不是新验收协议或close/Stop通过证据。动作失败返回1，不吞失败；参数/启动前配置错误返回2。普通阻塞返回1，动作成功返回0。中断可能留下checking/running记录，须先核对RUN、动作记录、进程及实际效果，不自动重放，也不通过改写旧记录消除未知；action_started=false但记录running仍不能证明动作未发生（启动与回执写入存在窗口）。动作的超时/进程组清理不撤销已发生的副作用。
+
+检查通过不产生提交、发布、删除或任何新权限；调用者须已获授权。该入口可被直接执行动作绕过，不提供安全隔离、防伪、事务或并发编辑保障。最后指纹核对后仍可能有外部写入；高影响对象应沿项目既有固定提交/快照与并发控制，不把本入口提升为不可绕过门禁。不迁移消费项目模式或强制所有任务采用。
 
 ## 扫描覆盖记录
 
