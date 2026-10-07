@@ -1,6 +1,6 @@
 # 脚本接口
 
-Python 3.10+，macOS/Linux，标准库。以下 `H` 表示本 Skill 的 `scripts/harness.py` 实际路径；命令中用实际路径替换。本页只约束脚本模式；模式选择见 [lifecycle.md](lifecycle.md#模式与生效边界)。全局 `--root PROJECT` 放在子命令前。返回码：0 成功或预览，1 检查未满足，2 配置或操作错误（包括已保存任务但摘要待同步的部分成功，见下文）。
+Python 3.10+，macOS/Linux，标准库。以下 `H` 表示本 Skill 的 `scripts/harness.py` 实际路径；命令中用实际路径替换。本页执行器命令及存储契约约束脚本模式；任务编号约定和独立Git输入快照按各节说明适用于两种模式。模式选择见 [lifecycle.md](lifecycle.md#模式与生效边界)。全局 `--root PROJECT` 放在子命令前。返回码：0 成功或预览，1 检查未满足，2 配置或操作错误（包括已保存任务但摘要待同步的部分成功，见下文）。
 
 | 命令 | 输入与作用 |
 |---|---|
@@ -123,6 +123,8 @@ verify向检查进程注入`AI_PROJECT_HARNESS_OPTIONAL_TESTS`，值为当前检
 
 ## 任务编号与文件命名
 
+本节约束两种模式的新任务编号与文件命名；文档模式不因此需要执行器或数据块。
+
 新建任务统一使用递增数字 ID，从 `TASK-001` 开始，不足三位补零；超过 `999` 后自然增加位数，例如 `TASK-1000`。接入已有项目时核对已有任务和编号，避免重复或复用已使用的编号。任务文件名与 ID 一致，例如 `docs/tasks/TASK-001.md`；任务名称写在正文标题中，不追加到文件名。
 
 历史四位数字或具名 ID 可继续读取和引用，原始 RUN、交付回执与会话绑定保留原 ID，不因新约定自动改写。需要迁移已有任务时，先核对并处理任务 ID、文件名、状态引用、证据路径和会话绑定，记录新旧对应与依据；没有完成迁移的历史任务继续使用原 ID。本约定由开发 AI 在新建任务时执行；当前 CLI 的字符校验兼容历史 ID，不提供三位编号的自动分配或强制拒绝保障。
@@ -144,6 +146,22 @@ verify向检查进程注入`AI_PROJECT_HARNESS_OPTIONAL_TESTS`，值为当前检
 
 begin 后唯一状态在 Markdown 的 `harness-task` 块。新任务使用 v2，并建立下述默认字段；未审阅状态不能通过 close。模板 records/task.md 的职责由同一数据块承载，正文仅补事实说明，不重复状态。脚本不会自动迁移非结构化历史。
 
+### 任务状态支持范围
+
+方法状态见[术语表](terminology.md#5-状态必须分字段)。当前脚本的状态写入入口如下；JSON和持久记录保留英文值，status摘要及resume/close文本显示中文。
+
+| 任务状态 | 当前命令支持 |
+|---|---|
+| 进行中 `in_progress` | begin创建；核对现场后resume --activate继续 |
+| 已中断 `interrupted` | pause保存中断及下一动作；不停止外部操作 |
+| 阻塞 `blocked` | close --complete发现交付条件缺口时写入；普通close不改任务状态 |
+| 已完成 `completed` | close --complete在条件及审阅材料满足时写入 |
+| 未开始 `not_started`、已取消 `cancelled` | 可供文档模式记录或历史任务读取/展示；当前没有转入这些状态的命令，update也不能修改state。已取消任务不能通过resume --activate继续 |
+
+需要取消脚本任务时，在原任务正文保留真实决定、已完成事实、在途操作及后续归属；需要保存中断可用pause，但不得把interrupted或completed冒充cancelled，也不手改状态绕过接口。当前执行器不提供取消终态转换；后续新工作另建有明确授权的任务。
+
+### RUN存储与前台执行
+
 人工验收字段见 verification.md。RUN 位于 `.harness/evidence/TASK/RUN/`；新RUN使用schema_version=2，含 summary.json、output.log 与适用的 test-report.json。summary.json 的 receipt_sha256 校验其余字段的规范JSON内容，摘要与校验值单次原子替换；不再另写summary.sha256。旧RUN v1仍按summary.json原始字节及summary.sha256读取，不改历史原件。旧执行器不能消费新RUN v2，恢复/继续执行须使用支持该格式的版本；任务v2和配置v1不变。单文件替换避免拆分提交窗口，不承诺文件系统断电持久性或防篡改。交付检查结果在 `.harness/close/TASK/`。回执原样保留，不删除失败来取得通过。
 
 verify用于前台检查：父进程退出不足以证明整组结束。正常退出后如同组后代仍存在（或组状态无法确认），按下述有界方式停止；确认停止记录interrupted及reason=descendants_after_parent_exit，无法确认则保留running/停止状态未知，不得封存为passed。组长原退出码保留，不由停止后代反推其结果。需要持续运行的服务应在项目中明确启动/健康检查/停止的资源契约，不能用这个前台检查的组长退出码代替服务验收。
@@ -162,10 +180,23 @@ doctor 的 ready 仅表示文件、配置和 README 导航检查就绪；接入�
 
 `resume` 的 assessment 和 `close` 结果保留原有 conditions_met、gaps、runs 等字段，额外提供以下派生信息；不新增任务必填字段：
 
-- `check_results`：按检查 ID 索引，含 run_id、execution_status、evidence_status、conditions_met、log 与 diagnostics。执行成功与证据仍有效分开；未执行、失败、在途、输入失效和损坏分别说明。log 是项目内日志路径，失败细节结合该 RUN 的 summary.json 与原始日志读取。
+- `check_results`：按检查 ID 索引，含 run_id、execution_status、evidence_status、conditions_met、log 与 diagnostics。execution_status读取最近RUN的overall_status，无RUN时为not_run；evidence_status是当前证据对检查通过的支持状态，取值见下表。log 是项目内日志路径，失败细节结合该 RUN 的 summary.json 与原始日志读取。
 - `diagnostics` 中每项含 code、message、action，输入变化时另含 changes（kind、name、change）。首层 gaps 同时列出最多五项变化的类别与名称；完整清单在 diagnostics。只显示环境变量名和变化，不输出变量值或其散列。旧 RUN 仅存检查定义整体摘要，因此该类差异只能定位到检查定义，不能追溯具体配置字段。执行结束时已检测到前后指纹不同并记为失效的 RUN，即使输入之后恢复，仍说明该 RUN 失效。执行期间改变但结束前恢复的输入无法由两次快照识别，执行器不提供持续变化监测。
 - `acceptance_results`：按验收项展示 id、text、checks、human_status 与 conditions_met。人工状态 recorded 仅表示来源及标准指纹已记录，不证明确认真实；共同缺口存在时各项机械条件仍未满足。映射齐全不能证明测试语义充分。
 - `global_gaps`：共同前置、历史无效/在途回执及审阅材料等缺口。存在无效回执时 runs 可能仍列可读取的旧 RUN，但不能据此当作最新通过，整体与验收项仍受共同缺口阻塞。
+
+RUN字段记录该次执行，不随之后的输入变化改写：overall_status由实际执行产生running/passed/failed/skipped/interrupted/error；未执行模板的not_run不是实际RUN。verification_status仅在执行passed且validity为valid时写verified，其他结果为unverified，不实现方法层的全部验证结论。validity为valid/invalidated/indeterminate，分别表示执行结束时输入一致/已变化/无法判定；valid不证明检查成功、日志完整或此后证据仍适用。
+
+| 当前evidence_status | 含义及与RUN的关系 |
+|---|---|
+| missing | 没有可供该检查评估的RUN；损坏历史回执还需核对global_gaps |
+| stale | 当前输入与RUN不同，或RUN已记录执行期间输入变化；对应当前已失效 |
+| unknown | 当前输入不可取得，或RUN未确认输入有效性；对应无法判定 |
+| unverified | 尚未形成可支持检查通过的证据；失败或未结束且没有上述输入缺口时可出现，不表示没有执行 |
+| invalid | 对可继续评估的RUN发现日志、报告或计数不合格；不等同仅发生输入变化 |
+| valid | 本检查最近执行、输入及日志/适用报告满足机械条件；整体任务仍可能存在其他缺口 |
+
+这些值不是validity的一一改名。输入未变的失败检查可同时具有overall_status=failed、verification_status=unverified、validity=valid和当前evidence_status=unverified：失败事实仍保留，但不能支持通过。不得从unverified推断未执行，也不得从一次失败直接判定产品缺陷；原因需结合原始材料审阅。多种缺口同时存在时结合execution_status、diagnostics及global_gaps判断，不由一个字段概括。
 
 JSON 和文本复用同一次评估；默认仍输出 JSON，返回码与既有判定不变。`resume --format text` 只读，`close --format text` 沿用 close 的回执及显式 --complete 副作用。建议动作不是授权，不自动重放检查或改变范围；输入已变化时核对变化，只复验受影响范围。
 
@@ -189,12 +220,14 @@ purpose.user_outcome 未提供时复用 goal；显式空白或坏值仍是草稿
 
 这只是字段片段；update 需要完整任务快照。先从 resume 的 task 字段取得完整对象，修改后保存到临时 JSON，再运行 `python3 H --root PROJECT update TASK --spec snapshot.json`；保留 updated_at，防止覆盖其他执行者新内容。不能由 update 改 id、schema、状态、创建时间、迁移与完成审阅字段。`begin/update` 在写入前汇总 decisions 与 document_sync.items 已填写条目的结构错误并给出字段路径；待处置的合法草稿仍可保存，完成条件由 close 核对。resume/close 对 changes、followups、human_items 和 risk_routes 逐项检查必需字段的类型与内容，缺口标出数组下标和字段；一项错误不遮住其他条目。历史记录通过同一入口报缺口，不因本次修复自动改写。人工确认只能按真实来源维护。
 
-- decisions：每项 id、kind（confirmed/authorized/candidate/rejected/observation）、source、summary、rule_ref。已确认或授权内改变规则且有 rule_ref 时，关联同步处置；候选不能当正式依据。
+- decisions：每项 id、kind（confirmed/authorized/candidate/rejected/observation）、source、summary、rule_ref。kind是事项分类，依次表示人已确认、开发AI授权内决定、候选、拒绝和观察事实。已确认或授权内改变规则且有 rule_ref 时，关联同步处置；候选不能当正式依据。
 - document_sync：reviewed、no_change_reason、items。items 每项 id、decision_ids数组、path、status（pending/updated/not_needed）、reason。updated 需文件存在且非空；not_needed 需理由；pending 阻止完成。
 - changes：每项 path 为非空项目相对路径、summary 为非空文字；删除文件可记录路径，语义审阅核对实际差异。
 - followups：每项 id、summary、owner、trigger、source 均为非空文字。不能转移本次必需验收规避完成要求。
 - human_items：每项 id、question、recommendation 为非空文字，materials 为非空的项目内路径数组，acceptance_id 为已知验收 ID 或 null。需要人判断与人已确认分开。
 - risk_routes：每项 kind 为 experiment/recovery/side_effect/incident，applicable 为布尔值，reason 为非空文字；适用时 record_ref 需指向项目内非空文件。不适用时可省略 record_ref。风险本身的结果要求加入验收检查。
+
+只有需要独立维护长期决定时才建立决策记录：candidate可对应其proposed状态；confirmed或authorized可在来源与范围成立时支持accepted；rejected保留实际拒绝依据；observation继续作为事实材料，不能自动转为已确认决定。决策后续被取代或停用按原记录的superseded/deprecated维护，不能从kind推断生命周期，也不将旧任务的当时分类批量改写。独立记录与任务互相引用，不复制同一决定正文。
 
 未完整的v2处置可以保存为草稿，但不能通过交付检查。JSON与文本resume均显示可用信息及具体缺口；文本中必需展示字段的显式空白或未完整内容标“未填写”，可省略字段按上述复用约定展示；不把草稿缺口补成有效内容，也不改写任务或重放命令。
 

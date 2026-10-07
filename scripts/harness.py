@@ -19,7 +19,9 @@ import fcntl
 import importlib.util
 from urllib.parse import unquote, urlsplit
 
-VERSION = '1.4.0-dev.2'
+VERSION = '1.4.0-dev.3'
+TASK_STATE_LABELS = {'not_started': '未开始', 'in_progress': '进行中', 'blocked': '阻塞',
+                     'interrupted': '已中断', 'completed': '已完成', 'cancelled': '已取消'}
 PACKAGE = Path(__file__).resolve().parents[1]
 _scan_spec = importlib.util.spec_from_file_location('ai_sdlc_scan_coverage', PACKAGE/'scripts/scan_coverage.py')
 scan_coverage = importlib.util.module_from_spec(_scan_spec)
@@ -800,7 +802,7 @@ def render_status(root, c, t):
     sp = safe(root, c['authorities']['status'])
     prior = sp.read_text() if sp.exists() else '# 当前工作入口\n'
     rel = os.path.relpath(task_path(root, t['id']), sp.parent)
-    section = f'{START}\n当前任务：[{t["id"]}]({rel})\n\n目标：{t["goal"]}\n\n任务执行状态：{t["state"]}\n\n下一动作：{t["next_action"]}\n\n详细验收、验证和人工验收以任务记录为准。\n{END}'
+    section = f'{START}\n当前任务：[{t["id"]}]({rel})\n\n目标：{t["goal"]}\n\n任务执行状态：{TASK_STATE_LABELS.get(t["state"], t["state"])}\n\n下一动作：{t["next_action"]}\n\n详细验收、验证和人工验收以任务记录为准。\n{END}'
     if t.get('schema_version') == 2:
         snapshot = human_summary(t, assess(root, c, t))
         extra = [f'更新于：{t["updated_at"]}', f'用户结果：{snapshot["user_outcome"]}',
@@ -1409,16 +1411,14 @@ def readable_assessment(assessment):
 
 
 def readable_close(result):
-    return '\n'.join([f'任务：{result["task_id"]}', f'任务执行状态：{result["task_state"]}',
+    return '\n'.join([f'任务：{result["task_id"]}', f'任务执行状态：{TASK_STATE_LABELS.get(result["task_state"], result["task_state"])}',
                       *readable_assessment(result), f'交付回执：{result["receipt"]}'])
 
 
 def readable_resume(result):
     t, assessment = result['task'], result['assessment']
-    labels = {'not_started':'未开始','in_progress':'进行中','blocked':'阻塞',
-              'interrupted':'已中断','completed':'已完成','cancelled':'已取消'}
     lines = [f'任务：{t["id"]}', f'目标：{t["goal"]}', f'范围：{t["scope"]}',
-             f'任务执行状态：{labels.get(t["state"], t["state"])}',
+             f'任务执行状态：{TASK_STATE_LABELS.get(t["state"], t["state"])}',
              f'下一动作：{t["next_action"]}', f'任务记录：{result["task_record"]}']
     if t['schema_version'] == 2:
         lines += [f'用户结果：{t["purpose"].get("user_outcome", t["goal"]) or "未填写"}',
