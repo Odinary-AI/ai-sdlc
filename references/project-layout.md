@@ -31,7 +31,7 @@
 | docs/status.md | 当前工作入口、交接与少量后续待办 | 基本职责，通常提交；详细执行状态归任务 |
 | docs/tasks/TASK-001.md | 任务执行、简单计划/决定/实验和单次发布记录 | 有任务时创建；沿[任务流程](lifecycle.md)维护 |
 | docs/architecture.md、rules.md、ux-guidelines.md、glossary.md | 架构、产品规则、UX及术语的独立正文 | 仅相应内容需要独立维护时建立，通常提交 |
-| docs/project-guide.md 或既有页面 | 面向项目所有者的导览快照；时机见[项目导览页](maintenance.md#项目导览页) | 触发时优先复用已有页面或README章节，不预建空页 |
+| docs/project-guide.html 或既有 HTML 页面 | 面向项目所有者的导览展示快照；时机见[项目导览页](maintenance.md#项目导览页) | 全面治理触发时必需，优先复用已有 HTML 页面/文档站；保留既有 Markdown 导览为唯一内容源并生成 HTML，不预建空页 |
 | docs/development.md | 复杂环境、部署、运行日志和恢复说明 | 简单内容先放README；拆分后原处改链接 |
 | docs/backlog.md | 较多、需要排序和长期跟踪的后续事项 | 少量待办先放status；拆分后status保留入口 |
 | docs/plans/、decisions/、experiments/ | 复杂或跨任务复用的计划、决定与实验记录 | 默认先放任务；需要独立维护才拆，任务引用正文，不重复维护 |

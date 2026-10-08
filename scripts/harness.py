@@ -19,7 +19,7 @@ import fcntl
 import importlib.util
 from urllib.parse import unquote, urlsplit
 
-VERSION = '1.4.0-dev.7'
+VERSION = '1.4.0-dev.8'
 TASK_STATE_LABELS = {'not_started': '未开始', 'in_progress': '进行中', 'blocked': '阻塞',
                      'interrupted': '已中断', 'completed': '已完成', 'cancelled': '已取消'}
 PACKAGE = Path(__file__).resolve().parents[1]
