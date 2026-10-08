@@ -19,7 +19,7 @@ import fcntl
 import importlib.util
 from urllib.parse import unquote, urlsplit
 
-VERSION = '1.4.0-dev.3'
+VERSION = '1.4.0-dev.5'
 TASK_STATE_LABELS = {'not_started': '未开始', 'in_progress': '进行中', 'blocked': '阻塞',
                      'interrupted': '已中断', 'completed': '已完成', 'cancelled': '已取消'}
 PACKAGE = Path(__file__).resolve().parents[1]
@@ -1166,6 +1166,12 @@ def fingerprint_changes(before, after):
     return changes
 
 
+def diagnostic(code, message, action, kind, identity, evidence_refs=()):
+    """Describe an existing assessment result; suggestions never execute it."""
+    return {'code': code, 'message': message, 'action': action,
+            'subject': {'kind': kind, 'id': identity}, 'evidence_refs': list(evidence_refs)}
+
+
 def assess_check(root, c, t, cid, directory, rec):
     """One check evaluation supplies both the legacy gate and its explanation."""
     result = {'run_id': rec['run_id'] if rec else None,
@@ -1173,7 +1179,8 @@ def assess_check(root, c, t, cid, directory, rec):
               'evidence_status': 'missing' if rec is None else 'unverified',
               'conditions_met': False, 'log': None, 'diagnostics': []}
     def explain(code, message, action, changes=None):
-        item = {'code': code, 'message': message, 'action': action}
+        refs = [str((directory/'summary.json').relative_to(root))] if directory else []
+        item = diagnostic(code, message, action, 'check', cid, refs)
         if changes: item['changes'] = changes
         result['diagnostics'].append(item)
     if rec is None:
@@ -1231,22 +1238,35 @@ def assess_check(root, c, t, cid, directory, rec):
 
 def assess(root, c, t):
     validate_task(t, c)
-    gaps = list(doctor(root, c, task_check_ids(t))['gaps'])
+    gaps, global_diagnostics = [], []
+    task_ref = str(task_path(root, t['id']).relative_to(root))
+    def add_gap(message, code, action, kind='task', identity=None, refs=None):
+        gaps.append(message)
+        global_diagnostics.append(diagnostic(code, message, action, kind, identity or t['id'],
+                                             [task_ref] if refs is None else refs))
+    for gap in doctor(root, c, task_check_ids(t))['gaps']:
+        add_gap(gap, 'project_prerequisite', '核对项目映射、实际文件与现行授权，补齐该共同前置后重新评估。',
+                'project', '.harness/project.json', ['.harness/project.json'])
     rgaps, materials = record_gaps(root, t)
-    gaps.extend(rgaps)
+    for gap in rgaps:
+        add_gap(gap, 'task_record_gap', '核对任务对应字段与引用材料，按现行依据补齐；草稿不代替真实处置。')
     scan = scan_coverage.evaluate(root, task_path(root, t['id']))
-    gaps.extend('扫描覆盖: ' + gap for gap in scan['gaps'])
+    for gap in scan['gaps']:
+        add_gap('扫描覆盖: ' + gap, 'scan_coverage_gap', '核对任务覆盖块、专项与引用证据，补齐适用调查或明确未完成。')
     if scan['present']:
         materials['harness-scan'] = digest(scan['fingerprint'])
     if t['schema_version'] == 2 and t.get('state') == 'completed' and not t.get('review_source'):
-        gaps.append('已完成任务缺审阅材料')
+        add_gap('已完成任务缺审阅材料', 'review_source_missing', '核对实际差异与语义审阅，记录真实审阅材料后重新核对交付。')
     if t['schema_version'] == 2 and t.get('review_source'):
+        review_code = 'review_material_changed'
         try:
             require(material_digest(root, t['review_source'], t['id'], t.get('review_kind', 'file')) == t.get('review_sha256'), '审阅材料已改变，需重新审阅并完成')
             if t.get('review_record_sha256'):
+                review_code = 'review_record_changed'
                 require(digest(review_record(t)) == t['review_record_sha256'], '受审任务记录已改变，需重新审阅并完成')
         except (HarnessError, OSError) as exc:
-            gaps.append(str(exc))
+            add_gap(str(exc), review_code, '核对受审对象变化，重新审阅实际差异及语义，再沿close完成核对；不只替换指纹。',
+                    refs=[task_ref, t['review_source']])
     selected = {}
     base = safe(root, f'.harness/evidence/{t["id"]}')
     names = {p.name for p in base.iterdir() if p.is_dir()} if base.exists() else set()
@@ -1269,10 +1289,14 @@ def assess(root, c, t):
             rec = read_run(root, t['id'], directory)
             if rec.get('overall_status') == 'running':
                 if resolution is None:
-                    gaps.append(f'{directory.name}: 执行仍在进行或中断后结局未知，先核对现场并 reconcile-run')
+                    add_gap(f'{directory.name}: 执行仍在进行或中断后结局未知，先核对现场并 reconcile-run',
+                            'run_unresolved', '先核对实际进程、回执与副作用；确认结局后按reconcile-run追加处置，不盲目重放。',
+                            'run', directory.name, [str(p.relative_to(root))])
             records.append((directory, rec))
         except (HarnessError, OSError, ValueError, TypeError) as exc:
-            gaps.append(f'无效执行回执 {directory.name}: {exc}')
+            add_gap(f'无效执行回执 {directory.name}: {exc}', 'invalid_run_receipt',
+                    '先核对现场与原回执，保留原件；按损坏回执流程追加处置并取得所需新证据，不直接重试未知操作。',
+                    'run', directory.name, [str((directory/'summary.json').relative_to(root))])
     if damaged_after is not None:
         for cid in task_check_ids(t):
             matches = [r for _, r in records if r.get('check_id') == cid]
@@ -1281,7 +1305,9 @@ def assess(root, c, t):
             except (KeyError, ValueError, TypeError):
                 fresh = False
             if not fresh:
-                gaps.append(f'{cid}: 损坏回执的检查归属不可依赖，须在最后一次损坏处置后重新 verify')
+                add_gap(f'{cid}: 损坏回执的检查归属不可依赖，须在最后一次损坏处置后重新 verify',
+                        'damaged_run_recheck', f'核对现场及最后一次损坏处置后，在当前授权与环境内重新verify {t["id"]} {cid}。',
+                        'check', cid, [str(dispositions.relative_to(root))])
     global_gaps = list(gaps)
     check_results, acceptance_results = {}, []
     for ac in t['acceptance']:
@@ -1298,26 +1324,36 @@ def assess(root, c, t):
                 detail, gap = assess_check(root, c, t, cid, directory, rec)
             check_results[cid] = detail
             if gap: gaps.append(f'{cid}: {gap}')
-        human_status = 'not_required'
+        human_status, human_diagnostics = 'not_required', []
         if ac.get('human_required'):
             h = t.get('human_acceptance', {}).get(ac['id'], {})
             if h.get('status') != 'accepted' or not h.get('source') or h.get('contract') != digest(contract(t)):
                 human_status = 'pending'
                 reasons = []
-                if h.get('status') != 'accepted': reasons.append('未记录 status=accepted，须先取得真实人工确认')
-                if not h.get('source'): reasons.append('缺少 source，须记录真实确认来源')
+                def human_gap(code, message, action):
+                    reasons.append(message)
+                    human_diagnostics.append(diagnostic(code, message, action, 'acceptance', ac['id'], [task_ref]))
+                if h.get('status') != 'accepted':
+                    human_gap('human_confirmation_missing', '未记录 status=accepted，须先取得真实人工确认',
+                              '向相应负责人提供结果与材料，取得真实确认后记录；开发AI不能自行签署。')
+                if not h.get('source'):
+                    human_gap('human_source_missing', '缺少 source，须记录真实确认来源',
+                              '核对已发生的人工确认及其真实来源；没有确认时先取得确认，不补造来源。')
                 if not h.get('contract'):
-                    reasons.append('缺少 contract；确认适用于当前范围后，使用 JSON close.contract 或 resume.assessment.contract 记录指纹')
+                    human_gap('human_scope_missing', '缺少 contract；确认适用于当前范围后，使用 JSON close.contract 或 resume.assessment.contract 记录指纹',
+                              '先核对真实确认适用于当前任务标准，再记录本次评估的contract，不从缺字段推断已确认。')
                 elif h.get('contract') != digest(contract(t)):
-                    reasons.append('contract 与当前任务标准不匹配；先核对原确认是否适用，必要时重新确认，不直接替换指纹')
+                    human_gap('human_scope_changed', 'contract 与当前任务标准不匹配；先核对原确认是否适用，必要时重新确认，不直接替换指纹',
+                              '核对原确认与范围变化；必要时向负责人重新确认，再更新记录，不直接替换指纹。')
                 gaps.append(f'{ac["id"]}: 必需人工验收未确认、无来源或范围已改变；' + '；'.join(reasons))
             else:
                 human_status = 'recorded'
         met = not global_gaps and human_status != 'pending' and all(check_results[cid]['conditions_met'] for cid in ac['checks'])
         acceptance_results.append({'id': ac['id'], 'text': ac['text'], 'checks': ac['checks'],
-                                   'human_status': human_status, 'conditions_met': met})
+                                   'human_status': human_status, 'conditions_met': met, 'diagnostics': human_diagnostics})
     return {'task_id': t['id'], 'time': now(), 'conditions_met': not gaps, 'gaps': gaps, 'runs': selected,
-            'global_gaps': global_gaps, 'check_results': check_results, 'acceptance_results': acceptance_results,
+            'global_gaps': global_gaps, 'global_diagnostics': global_diagnostics,
+            'check_results': check_results, 'acceptance_results': acceptance_results,
             'record_fingerprint': digest({'task': {k:v for k,v in t.items() if k not in ('state','updated_at','next_action','next_reason')}, 'materials': materials, 'reconciliations': reconciliations}),
             'coverage': 'v2' if t['schema_version'] == 2 else 'legacy',
             'contract': digest(contract(t)), 'boundary': '机械条件检查；不证明人工来源真实性、需求语义正确或平台强制阻断。'}
@@ -1392,11 +1428,15 @@ def readable_assessment(assessment):
     changes = {'added': '新增', 'removed': '移除', 'modified': '变化', 'unavailable': '无法比较'}
     lines = ['交付机械条件：' + ('已满足' if assessment['conditions_met'] else '有缺口')]
     lines.extend('共同缺口：' + gap for gap in assessment['global_gaps'])
+    for d in assessment.get('global_diagnostics', []):
+        lines.append(f'共同处置 [{d["code"]} / {d["subject"]["kind"]} {d["subject"]["id"]}]：{d["action"]}')
+        if d['evidence_refs']: lines.append('  核对材料：' + '、'.join(d['evidence_refs']))
     for ac in assessment['acceptance_results']:
         lines.append(f'验收 {ac["id"]}：{ac["text"]}；检查：{", ".join(ac["checks"]) or "仅人工"}；'
                      f'机械条件：{"满足" if ac["conditions_met"] else "有缺口"}；人工：{humans[ac["human_status"]]}')
         if ac['human_status'] == 'pending':
             lines.extend('  原因：' + gap for gap in assessment['gaps'] if gap.startswith(ac['id'] + ':'))
+            lines.extend(f'  人工处置 [{d["code"]}]：{d["action"]}' for d in ac.get('diagnostics', []))
     for cid, item in assessment['check_results'].items():
         lines.append(f'检查 {cid}：执行{execution.get(item["execution_status"], "未知")}；'
                      f'证据{evidence[item["evidence_status"]]}；RUN：{item["run_id"] or "无"}')

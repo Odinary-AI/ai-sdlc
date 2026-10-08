@@ -2,7 +2,7 @@
 name: ai-sdlc
 description: Explicitly invoked project engineering mechanism for individual developers and one-person companies. Adopt a project, execute or resume an authorized task, inspect and clean project files, carry out integrated project governance, and check evidence-backed delivery. Invoke only when the user explicitly requests this skill; ordinary discussion does not authorize adoption.
 metadata:
-  version: "1.4.0-dev.3"
+  version: "1.4.0-dev.5"
 ---
 
 # AI工程机制
@@ -39,6 +39,8 @@ metadata:
 恢复与交付命令提供验收—检查—证据视图及失效定位；接入或相关机制变化时可复用随包自检。用法和边界见[脚本接口](references/cli.md#诊断与验收视图)。
 
 完成交付时让人看到：结果入口、已验证范围、实际证据、未完成项、下一动作及是否需要决定。开始、重要发现、阻碍和交付时用简洁自然语言说明；技术日志留在证据目录。
+
+面向人的说明及 AI 交接中的自然语言，沿用项目标准术语，明确动作主体和对象。执行前必须知道的条件放在动作前；通常一句话表达一个主要动作或判断。区分事实、推断和待确认事项。简化表达时保留授权、范围、例外、要求强度和不确定性。已有结构化字段保持其定义，不用笼统的“完成”合并不同状态。
 
 ## 条件流程
 

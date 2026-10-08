@@ -200,6 +200,14 @@ RUN字段记录该次执行，不随之后的输入变化改写：overall_status
 
 JSON 和文本复用同一次评估；默认仍输出 JSON，返回码与既有判定不变。`resume --format text` 只读，`close --format text` 沿用 close 的回执及显式 --complete 副作用。建议动作不是授权，不自动重放检查或改变范围；输入已变化时核对变化，只复验受影响范围。
 
+### 恢复诊断的共同表达
+
+`global_diagnostics`与`global_gaps`逐项同序对应，覆盖共同前置、任务材料、扫描覆盖、审阅和历史回执等缺口；`acceptance_results[].diagnostics`说明必需人工验收缺口。它们与已有`check_results[].diagnostics`共用`code`、`message`、`action`，补充`subject`（kind与id：project/task/check/run/acceptance）和`evidence_refs`（项目内材料位置数组，无材料时为空）。引用是核对位置，可指向预期但缺失的材料，不表示材料有效或语义已核实。旧字段、返回码与通过判定保持。
+
+诊断从原判定生成；无法细分的项目/任务/扫描缺口保留类别级code及原说明，不靠关键词猜测。重要恢复code包括`run_unresolved`、`invalid_run_receipt`、`damaged_run_recheck`、`review_source_missing`、`review_material_changed`、`review_record_changed`，以及`human_confirmation_missing`、`human_source_missing`、`human_scope_missing`、`human_scope_changed`。code帮助定位，不能只看某一诊断列表忽略其他共同缺口、检查或人工验收。
+
+`action`是建议及必要前提，不是执行命令或授权。未知在途结果先核对实际进程、回执与副作用，再决定是否reconcile-run；损坏回执按现场核对追加处置，原件保留；人工验收须取得真实确认并核对范围。JSON与文本均读取同次评估，不自动重试、修改确认或重放操作。诊断仅改善表达，不证明AI恢复效果或用户来源真实性。
+
 ## 可移植机制自检
 
 接入或修改相关机制时，可运行 `python3 /实际位置/ai-sdlc/scripts/self_test.py`，也可将该命令映射为项目的 tests 检查。使用与 harness.py 一致的 Python 3.10+；脚本只依赖标准库及同包 harness.py/模板，复制整个 Skill 包后可直接运行。
