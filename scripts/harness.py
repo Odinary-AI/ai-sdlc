@@ -19,7 +19,7 @@ import fcntl
 import importlib.util
 from urllib.parse import unquote, urlsplit
 
-VERSION = '1.4.0-dev.6'
+VERSION = '1.4.0-dev.7'
 TASK_STATE_LABELS = {'not_started': '未开始', 'in_progress': '进行中', 'blocked': '阻塞',
                      'interrupted': '已中断', 'completed': '已完成', 'cancelled': '已取消'}
 PACKAGE = Path(__file__).resolve().parents[1]
@@ -375,15 +375,19 @@ def doctor(root, c, check_ids=None):
             'boundary': 'ready 仅表示文件、配置及导航检查就绪，不等于接入任务完成。规则语义及授权来源由开发 AI 核对。独立平台适配的启用、信任及实际触发需另行验证。'}
 
 def adopt(root, mapping_path=None, apply=False):
+    mapping = load(Path(mapping_path)) if mapping_path else {}
+    require(isinstance(mapping, dict), '项目映射必须为对象')
+    require(isinstance(mapping.get('authorities', {}), dict), 'authorities 必须为对象')
     cp = safe(root, '.harness/project.json')
     if cp.exists():
         c = config(root)
         if mapping_path:
-            proposed = load(Path(mapping_path))
-            require(all(c.get(k) == v for k, v in proposed.items()), '已有配置与新映射不同；请先比较并在授权范围内合并，不自动覆盖')
+            # Omitted roles retain the project's mapping, not current defaults.
+            same = all(c.get(k) == v for k, v in mapping.items() if k != 'authorities')
+            same = same and all(role in c['authorities'] and c['authorities'][role] == path
+                                for role, path in mapping.get('authorities', {}).items())
+            require(same, '已有配置与新映射不同；请先比较并在授权范围内合并，不自动覆盖')
         return {'action': 'reused', **doctor(root, c)}
-    mapping = load(Path(mapping_path)) if mapping_path else {}
-    require(isinstance(mapping, dict), '项目映射必须为对象')
     authorities = {**DEFAULTS, **mapping.get('authorities', {})}
     if 'validation' not in mapping.get('authorities', {}) and not (root/'TESTING.md').exists():
         candidates = [p for p in ('CONTRIBUTING.md', 'doc/DESIGN-PRINCIPLES.md', 'docs/TESTING.md') if (root/p).exists()]

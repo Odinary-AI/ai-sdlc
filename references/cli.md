@@ -88,6 +88,8 @@ resume、close及Stop的共同assess会检查存在的覆盖块；缺条目、�
 
 配置在 `.harness/project.json`，实际文件包含 schema_version=1、mechanism_version。mechanism_version记录接入时的执行器版本；doctor输出的是当前实际运行的执行器版本，两者可能不同，不表示安装或迁移已经完成。包版本见[Skill元数据](../SKILL.md)，与配置/任务数据格式版本分开。脚本不自动覆盖配置。doctor 诊断全部映射检查；任务命令只检查当前验收引用的检查配置和输入，共同规则及导航仍须就绪。目录输入包含目录内文件清单（忽略 __pycache__ 与 .DS_Store），新删文件也影响指纹；不要把自动变化的输出或整个项目目录当测试输入。选中的环境变量保存哈希，不保存原始值；日志内容由项目负责脱敏。
 
+接入映射及其中的authorities须为JSON对象。首次接入未填写的职责使用默认路径；重复接入只比较明确填写的职责，省略的职责保留已有映射。其他明确填写字段仍与已有配置比较，真实差异拒绝自动覆盖；预览及--apply遵循同一规则。
+
 status不能与requirements、validation或agent_policy映射到同一实际文件（包含规范化路径、符号链接及现有文件的其他别名），接入预览及写入前均拒绝并指出冲突职责；状态写回会改变这些规则文件的整文件指纹。现有文件按实际身份判断，大小写敏感文件系统上的不同文件可分别映射；未建立的路径若仅大小写不同，先建立并核对实际文件再映射，预览不写探针文件来猜测。沿用分文件映射，不自动拆分已有文件。status仅与entrypoint共文件不受此限制。职责载体必须为非空文件；这些文件中的普通本地导航可以指向存在的文件或目录，缺失目标仍报错。
 
 导航检查识别普通Markdown行内链接、尖括号目标、可选标题，以及单行定义的完整/折叠/快捷引用式链接；本地路径按URI路径解码一次，片段不作为文件名。代码围栏、缩进代码、行内代码及HTML注释中的示例不作导航或缺失链接；图片检查本地资源存在性，但不能代替职责导航。外部URI不抓取，文件内标题锚点不验证。不提供完整Markdown渲染、原始HTML导航或框架路由检查；这些入口仍须由项目相应检查支持，不把文本示例当真实入口。
@@ -226,7 +228,7 @@ purpose.user_outcome 未提供时复用 goal；显式空白或坏值仍是草稿
 {"document_sync":{"reviewed":true,"no_change_reason":"本次修复恢复既有规则，规则正文不变","items":[]}}
 ```
 
-这只是字段片段；update 需要完整任务快照。先从 resume 的 task 字段取得完整对象，修改后保存到临时 JSON，再运行 `python3 H --root PROJECT update TASK --spec snapshot.json`；保留 updated_at，防止覆盖其他执行者新内容。不能由 update 改 id、schema、状态、创建时间、迁移与完成审阅字段。`begin/update` 在写入前汇总 decisions 与 document_sync.items 已填写条目的结构错误并给出字段路径；待处置的合法草稿仍可保存，完成条件由 close 核对。resume/close 对 changes、followups、human_items 和 risk_routes 逐项检查必需字段的类型与内容，缺口标出数组下标和字段；一项错误不遮住其他条目。历史记录通过同一入口报缺口，不因本次修复自动改写。人工确认只能按真实来源维护。
+这只是字段片段；完整更新步骤见下方[任务快照更新](#任务快照更新)。`begin/update` 在写入前汇总 decisions 与 document_sync.items 已填写条目的结构错误并给出字段路径；待处置的合法草稿仍可保存，完成条件由 close 核对。resume/close 对 changes、followups、human_items 和 risk_routes 逐项检查必需字段的类型与内容，缺口标出数组下标和字段；一项错误不遮住其他条目。历史记录通过同一入口报缺口，不因本次修复自动改写。人工确认只能按真实来源维护。
 
 - decisions：每项 id、kind（confirmed/authorized/candidate/rejected/observation）、source、summary、rule_ref。kind是事项分类，依次表示人已确认、开发AI授权内决定、候选、拒绝和观察事实。已确认或授权内改变规则且有 rule_ref 时，关联同步处置；候选不能当正式依据。
 - document_sync：reviewed、no_change_reason、items。items 每项 id、decision_ids数组、path、status（pending/updated/not_needed）、reason。updated 需文件存在且非空；not_needed 需理由；pending 阻止完成。
@@ -243,6 +245,12 @@ close --complete 的 review-source 在v2必须为项目内非空审阅材料，�
 
 `python3 H --root PROJECT migrate-task TASK` 预览旧v1任务；加 --apply 保存原件及散列再升级。未知版本拒绝；v1可只读resume及legacy close，继续verify/activate/pause前需迁移。旧RUN不修改，升级后的当前证据重新核对。TASK源JSON仅为创建历史，别当作当前状态。
 
+### 任务快照更新
+
+从 `resume TASK-001` 的 `task` 字段取得完整对象，只应用本次内容修改，保留 `state` 和 `updated_at`；保存为临时 `snapshot.json` 后执行 `python3 H --root PROJECT update TASK-001 --spec snapshot.json`。不能只提交字段片段，也不能通过update改变id、schema、状态、创建时间、迁移或完成审阅字段。快照过期时重新读取并重应用修改，不只替换时间戳。
+
+`verify`保存独立RUN，不改写任务记录；`update`、`pause`、`resume --activate`和`close --complete`等任务写入会更新记录。仅修改document_sync等处置元数据不会改变RUN的任务标准指纹；目标、范围、授权、验收项及所选检查的相关输入变化会使对应RUN失效。已完成任务的受审记录另按其内容重新核对。更新后先看resume/close的缺口，只复验受影响检查。
+
 ### 已有人工确认的记录示例
 
 仅当人已真实确认且确认适用于当前任务标准时记录。`resume` 的 JSON 输出同时提供 `task` 和 `assessment.contract`；`close` 的 JSON 输出也提供顶层 `contract`，无需调用方重算散列。下面的 `result` 是本次 `resume` JSON 对象，`actual_source` 是已核对的真实确认来源，`AC-01` 替换为对应验收ID：
@@ -256,7 +264,7 @@ task["human_acceptance"]["AC-01"] = {
 }
 ```
 
-将完整 `task` 保存为临时 `snapshot.json`，再执行 `update TASK-001 --spec snapshot.json`。不只提交上面的字段片段。尚未确认时保留待确认；已有指纹不匹配时先核对确认所覆盖的标准及实际变化，必要时重新确认，不能直接换成新指纹求通过。此记录不代替语义审阅，`human_items` 只提供待人问题与材料，不是已确认结果。
+按[任务快照更新](#任务快照更新)保存上述修改。尚未确认时保留待确认；已有指纹不匹配时先核对确认所覆盖的标准及实际变化，必要时重新确认，不能直接换成新指纹求通过。此记录不代替语义审阅，`human_items` 只提供待人问题与材料，不是已确认结果。
 
 ### 收尾失败后的恢复示例
 
@@ -264,11 +272,11 @@ task["human_acceptance"]["AC-01"] = {
 
 任务是保存事实，状态摘要是派生视图。任务文件成功保存后若摘要写入失败，CLI仍返回2，但stderr JSON为status=partial，并含task_committed=true、task_id、task_state、updated_at、status_synced=false和next_action。此时不要重放begin/update/pause/activate/complete，先读取任务确认，再执行`sync-status TASK-001`。该命令只刷新指定任务的摘要（可重复执行），不改任务状态/时间、审阅绑定或RUN，不执行验证命令。它会重新核对当前证据以生成摘要，成功仅代表摘要同步，不代表任务验收通过。若失败动作是close --complete，partial还含receipt_pending=true；摘要同步后按next_action再运行不带--complete的`close TASK-001`，仅补当前交付检查回执，供Stop等消费者核对，不重复完成动作。摘要标记本身损坏时先修复标记，命令不猜测覆盖人工正文。正常返回结构不变；进程被强制终止而无结果时，仍须先读取现场判断提交情况。
 
-需要修改记录时，先 `resume TASK-001`，在当前 `task` 上应用修改，保留其 `state` 和 `updated_at` 后 `update`；`blocked` 本身不阻止内容更新。若接着需要运行验证，核对现场后执行 `resume TASK-001 --activate`，再 `verify TASK-001 CHECK_ID`，其中检查ID取自本任务验收。已有证据仍有效且只补齐记录时，不因收尾失败自动重跑检查。
+`blocked`本身不阻止按[任务快照更新](#任务快照更新)修改内容。若接着需要运行验证，核对现场后执行 `resume TASK-001 --activate`，再 `verify TASK-001 CHECK_ID`，其中检查ID取自本任务验收。已有证据仍有效且只补齐记录时，不因收尾失败自动重跑检查。
 
 重新交付时可用 `close TASK-001 --complete --review-source docs/tasks/TASK-001.md`；路径必须对应真实非空审阅内容，也可换为项目内独立审阅文件。会话原话不能直接用作该路径，人工验收来源与差异审阅材料是不同职责。
 
-`update` 报快照过期时，从 `resume TASK-001` 返回的 `task` 取得当前完整快照，在其上重新应用修改，不只替换时间戳。`verify` 保存独立RUN，不改写任务记录；`update`、`pause`、`resume --activate` 和 `close --complete` 等任务写入会更新记录。仅修改 document_sync 等处置元数据不会改变 RUN 的任务标准指纹；目标、范围、授权、验收项，以及所选检查的其他相关输入变化会使对应 RUN 失效。已完成任务的受审记录另按其内容重新核对。修改后先看 resume/close 的具体缺口，只复验受影响检查。以上是按需要选取的操作示例，不要求每次任务执行固定命令序列。
+以上是按需要选取的操作示例，不要求每次任务执行固定命令序列。
 
 ## 历史在途执行处置
 
