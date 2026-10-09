@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ai-sdlc · 项目概览与工程全景</title>
+<style>
+:root{color-scheme:light;--paper:#f7f8f4;--ink:#202c33;--muted:#52616a;--line:#cbd2cd;--accent:#145f58;--focus:#b25916}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:17px/1.75 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+main{max-width:1120px;margin:auto;padding:42px 28px 80px}header{border-bottom:1px solid var(--line);padding-bottom:22px}h1{font-size:36px;line-height:1.3;margin:0 0 12px}h2{font-size:26px;line-height:1.4}h3{font-size:20px}h4{font-size:17px}p{max-width:82ch}a{color:var(--accent);text-underline-offset:3px;overflow-wrap:anywhere}button,input,select{font:inherit}button{padding:6px 14px;background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:4px;cursor:pointer}button[aria-pressed=true]{background:var(--accent);color:#fff}input,select{border:1px solid var(--line);border-radius:4px;padding:6px 10px;max-width:100%}
+:focus-visible{outline:3px solid var(--focus);outline-offset:3px}nav{display:flex;gap:10px 18px;flex-wrap:wrap;padding:18px 0;border-bottom:1px solid var(--line)}section{padding:16px 0;scroll-margin-top:18px}details{border-top:1px solid var(--line);padding:12px 0}summary{cursor:pointer;font-weight:600}pre{overflow:auto;background:#edf0e9;padding:16px}table{border-collapse:collapse;display:block;overflow:auto}th,td{padding:10px;border:1px solid var(--line);text-align:left}.snapshot,.muted,.source,.map-hint{color:var(--muted);font-size:15px}.note,.node-detail{background:#eef2ec;border-left:3px solid var(--accent);padding:12px 18px}.pairs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 24px}.buttons,.map-controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.panel[hidden]{display:none}.panel{margin-top:16px}.map{margin:24px 0 36px}.map figcaption{font-size:21px;font-weight:650}.map{border-top:1px solid var(--line);padding-top:18px}.map-controls{background:#edf1eb;padding:12px;border-radius:6px}.map-controls label{font-size:14px}.map-hint{font-size:14px}.map-scroll{background:#fbfcf9;border:1px solid #dce2d8;border-radius:10px;margin:10px 0;padding:12px}.map-scroll{overflow-x:auto;padding:12px 0}.map svg{display:block;width:100%;min-width:690px}.map-group rect{fill:#f0f3ed;stroke:#c8d2c5;stroke-width:1}.map-group text{font-size:13px;font-weight:600;fill:#52616a}.edge{fill:none;stroke:#577569;stroke-width:1.8}.edge.conditional,.edge.optional,.edge.feedback{stroke-dasharray:7 5;stroke:#859388}.edge.reference{stroke:#78909b;stroke-dasharray:2 4}.edge.uncertain{stroke-dasharray:3 5}.edge-label rect{fill:#fbfcf9;stroke:#dce2d8;stroke-width:.5}.edge-label text{font-size:12px;fill:#46574e}.node rect{fill:#fff;stroke:#aebeb1;stroke-width:1.25}.node.core rect{fill:#e3f0ea;stroke:#326f5f;stroke-width:1.8}.node.data rect{fill:#edf2f6;stroke:#829cae}.node.optional rect{stroke-dasharray:5 3;fill:#f9faf7}.node.actor rect,.node.result rect{fill:#f2f4ed}.node text{fill:var(--ink)}.node .node-role{font-size:12px;fill:#617065}.node .node-title{font-size:16px;font-weight:650}.node .node-summary{font-size:12px;fill:#52616a}.node .basis{font-size:11px;fill:#617065}.node{cursor:pointer}.node.selected rect,.node:focus-visible rect{stroke:var(--focus);stroke-width:3}.node:focus-visible{outline:none}.edge.reached{stroke:var(--accent);stroke-width:3}.dim{opacity:.24}.node-detail h3{margin:0 0 8px}.node-detail p{margin:6px 0}.node-detail ul{margin:6px 0}.node-detail code{font-size:13px;overflow-wrap:anywhere}.architecture-map{margin:22px 0;overflow-x:auto}.architecture-map svg{width:100%;min-width:650px}.architecture-map text{font:16px system-ui}.arch-node rect,.arch-mode rect{fill:#fff;stroke:var(--line)}.arch-heading,.arch-package-title{font-weight:650}.arch-small{font-size:13px!important}.arch-guidance{stroke-dasharray:6 5}.diagram-key{font-size:14px;color:var(--muted)}footer{margin-top:36px;border-top:1px solid var(--line);padding-top:16px}
+@media(max-width:700px){main{padding:24px 16px 60px}.pairs{grid-template-columns:1fr}h1{font-size:30px}}@media print{button,input{display:none}main{padding:0;max-width:none}.dim{opacity:1}.node-detail{break-inside:avoid}a{color:inherit}}
+</style></head>
+<body><main><header><h1>ai-sdlc · 项目概览与工程全景</h1><p class="snapshot">2026-10-09 · 1.5.2-dev.0 · 发布适配源 SHA256 84a70924e32d848949804d388c72ef1f9d12d586d1fe5d7193dce39c77c6a395</p><p>ai-sdlc项目概览参考快照；保留概览与三图，开发任务、实时状态及私有证据不随包。图来源改用包内同概念的规则或实现，不表示本机安装或远端发布已完成。现行规则以包内原文为准。</p><p class="muted">有身份的阅读快照；任务、设计及验证仍以其原始来源为准。</p></header><nav aria-label="导览目录"><a href="#purpose">目标与边界</a><a href="#capabilities">核心能力</a><a href="#workflow">主流程</a><a href="#structure">架构与协作</a><a href="#choices">关键取舍</a><a href="#engineering">工程态势</a><a href="#limits">当前限制</a></nav><section id="purpose"><h2>目标与边界｜谁使用、解决什么问题</h2>
+<p>ai-sdlc为个人开发者和一人公司（OPC）提供AI工程机制，帮助AI跨会话持续推进项目：保留上下文和进度、让局部工作对应整体目标、依据真实结果判断交付，并维持授权与执行边界。</p><p>重点服务一万行以上、持续迭代的项目；这是目标场景，不是规模保证或接入门槛。它提供流程、模板与本机工具，开发方法由AI在项目约束内选择。</p><div class="note">这份工程全景帮助读者理解、接手和找到下一步。无人后台开发、自动合入发布、多用户调度、主观质量自动判定不在现行承诺内。</div><p class="source"><a href="../../SKILL.md">能力与适用边界</a> · <a href="../../SKILL.md">Skill使用入口</a></p>
+</section>
+<section id="capabilities"><h2>核心能力｜能完成的工作与状态边界</h2>
+<div class="pairs"><div><h3>接入、实施与恢复</h3><p>保留项目已有组织，映射真实规则和检查；按原任务及现场恢复，未知操作不盲目重放。</p></div><div><h3>验证、交付与治理</h3><p>运行选定检查、保存真实结果，核对相关输入与当前证据；按风险检查、修复及回顾。</p></div><div><h3>通用工程导览</h3><p>方法与模板随Skill分发；可选标准库工具支持同源HTML、节点、上下游及明确来源核对。文档模式或已有文档站可继续使用。</p></div><div><h3>实际状态分开判断</h3><p>已实现、已验证、任务完成、已安装、已推送和会话已加载不是同一件事。每项结论回查其对应对象与证据。</p></div></div><p class="source"><a href="../../SKILL.md">能力路由</a> · <a href="../../references/cli.md">工具接口与限制</a></p>
+</section>
+<section id="workflow"><h2>主流程｜从用户结果到工程交付</h2>
+<ol><li>用户说明目标、范围与授权；需要Skill时显式调用。</li><li>开发AI读取项目依据、工作区和任务，确定验收及必要检查。</li><li>实施并验证，保存真实结果和剩余未知。</li><li>核对覆盖、差异和有效证据；需要人的决定/验收交给对应负责人。</li><li>按已获授权完成提交、安装或发布等动作，分别回读实际对象。</li></ol>
+<figure class="map" data-map="0"><figcaption id="collaboration-title-0">使用与协作：目标、执行、验证和反馈</figcaption>
+<p class="map-hint">选择节点查看详情；聚焦仅沿已列关系。实线为主要关系，虚线为条件关系或反馈，点线为引用；是否必须依文字条件判断，推断/待核实另有文字标记。</p>
+<div class="map-controls"><label>查找节点 <input type="search" aria-label="查找图中节点" data-search></label><button type="button" data-direction="all">全图</button><button type="button" data-direction="upstream">上游</button><button type="button" data-direction="downstream">下游</button><label>路径终点 <select data-route-target aria-label="选择路径终点"><option value="">请选择</option><option value="owner">项目负责人</option><option value="rules">Skill与已采纳规则</option><option value="agent">开发AI</option><option value="project">项目记录与当前依据</option><option value="checks">项目检查与执行器</option><option value="review">交付审阅与人的验收</option></select></label><button type="button" data-route>显示路径</button></div>
+<p class="map-hint search-summary" role="status">未筛选节点。</p>
+<div class="map-scroll"><svg viewBox="0 0 990 805" role="group" aria-labelledby="collaboration-title-0">
+<defs><marker id="arrow-0" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10Z" fill="currentColor"/></marker></defs>
+<path class="edge primary" data-edge="0" d="M165.0 172.0L165.0 213.5L440.7 213.5L440.7 255.0" marker-end="url(#arrow-0)"><title>目标、授权和人的决定</title></path>
+<g class="edge-label" data-for-edge="0"><rect x="264.8" y="184.5" width="76.0" height="24" rx="4"/><text x="302.8" y="200.5" text-anchor="middle">目标与授权</text></g>
+<path class="edge primary" data-edge="1" d="M785.0 172.0L785.0 213.5L509.3 213.5L509.3 255.0" marker-end="url(#arrow-0)"><title>方法与项目约束</title></path>
+<g class="edge-label" data-for-edge="1"><rect x="615.2" y="184.5" width="64.0" height="24" rx="4"/><text x="647.2" y="200.5" text-anchor="middle">工程约束</text></g>
+<path class="edge primary" data-edge="2" d="M440.7 367.0L440.7 408.5L165.0 408.5L165.0 450.0" marker-end="url(#arrow-0)"><title>维护范围内事实与任务</title></path>
+<g class="edge-label" data-for-edge="2"><rect x="270.8" y="379.5" width="64.0" height="24" rx="4"/><text x="302.8" y="395.5" text-anchor="middle">维护事实</text></g>
+<path class="edge primary" data-edge="3" d="M509.3 367.0L509.3 408.5L785.0 408.5L785.0 450.0" marker-end="url(#arrow-0)"><title>实施后执行适用检查</title></path>
+<g class="edge-label" data-for-edge="3"><rect x="615.2" y="379.5" width="64.0" height="24" rx="4"/><text x="647.2" y="395.5" text-anchor="middle">实际执行</text></g>
+<path class="edge primary" data-edge="4" d="M785.0 562.0L785.0 603.5L440.7 603.5L440.7 645.0" marker-end="url(#arrow-0)"><title>真实记录和结果</title></path>
+<g class="edge-label" data-for-edge="4"><rect x="580.8" y="574.5" width="64.0" height="24" rx="4"/><text x="612.8" y="590.5" text-anchor="middle">真实结果</text></g>
+<path class="edge primary" data-edge="5" d="M165.0 562.0L165.0 603.5L509.3 603.5L509.3 645.0" marker-end="url(#arrow-0)"><title>范围、验收及相关依据</title></path>
+<g class="edge-label" data-for-edge="5"><rect x="299.2" y="574.5" width="76.0" height="24" rx="4"/><text x="337.2" y="590.5" text-anchor="middle">范围与依据</text></g>
+<path class="edge feedback" data-edge="6" d="M475.0 757.0L475.0 779.0L18.0 779.0L18.0 116.0L40.0 116.0" marker-end="url(#arrow-0)"><title>结果、剩余事项和待人确认</title></path>
+<g class="edge-label" data-for-edge="6"><rect x="26.0" y="568.1" width="108.5" height="24" rx="4"/><text x="80.3" y="584.1" text-anchor="middle">结果 / 待人确认</text></g>
+<g class="node actor" role="button" tabindex="0" aria-label="项目负责人" data-node="owner"><rect x="40" y="60" width="250" height="112" rx="9"/><text class="node-role" x="56" y="82">参与者</text>
+<text class="node-title" x="56" y="108">项目负责人</text>
+<text class="node-summary" x="56" y="147">目标、授权与人的决定</text>
+<text class="basis" x="273" y="83" text-anchor="end">来源 1</text></g>
+<g class="node rule" role="button" tabindex="0" aria-label="Skill与已采纳规则" data-node="rules"><rect x="660" y="60" width="250" height="112" rx="9"/><text class="node-role" x="676" y="82">规则依据</text>
+<text class="node-title" x="676" y="108">Skill与已采纳规则</text>
+<text class="node-summary" x="676" y="147">显式Skill / 已采纳规则</text>
+<text class="basis" x="893" y="83" text-anchor="end">来源 1</text></g>
+<g class="node core" role="button" tabindex="0" aria-label="开发AI" data-node="agent"><rect x="350" y="255" width="250" height="112" rx="9"/><text class="node-role" x="366" y="277">执行核心</text>
+<text class="node-title" x="366" y="303">开发AI</text>
+<text class="node-summary" x="366" y="342">实施、选择检查与审阅</text>
+<text class="basis" x="583" y="278" text-anchor="end">来源 1</text></g>
+<g class="node data" role="button" tabindex="0" aria-label="项目记录与当前依据" data-node="project"><rect x="40" y="450" width="250" height="112" rx="9"/><text class="node-role" x="56" y="472">项目数据</text>
+<text class="node-title" x="56" y="498">项目记录与当前依据</text>
+<text class="node-summary" x="56" y="537">任务、设计与现行依据</text>
+<text class="basis" x="273" y="473" text-anchor="end">来源 1</text></g>
+<g class="node helper" role="button" tabindex="0" aria-label="项目检查与执行器" data-node="checks"><rect x="660" y="450" width="250" height="112" rx="9"/><text class="node-role" x="676" y="472">辅助工具</text>
+<text class="node-title" x="676" y="498">项目检查与执行器</text>
+<text class="node-summary" x="676" y="537">真实命令、日志与RUN</text>
+<text class="basis" x="893" y="473" text-anchor="end">来源 1</text></g>
+<g class="node result" role="button" tabindex="0" aria-label="交付审阅与人的验收" data-node="review"><rect x="350" y="645" width="250" height="112" rx="9"/><text class="node-role" x="366" y="667">结果与审阅</text>
+<text class="node-title" x="366" y="693">交付审阅与人的验收</text>
+<text class="node-summary" x="366" y="732">证据、覆盖与验收分别判断</text>
+<text class="basis" x="583" y="668" text-anchor="end">来源 1</text></g>
+</svg></div><p class="map-hint">图中短标签用于快速阅读；完整关系、条件和来源见节点详情或下方列表。</p><div class="node-detail" aria-live="polite"><p>选择节点查看完整说明、关系及来源。</p></div>
+<details><summary>全部节点、关系及来源</summary>
+<h4>项目负责人</h4><p>目标、授权与人的决定</p><p>确定目标、范围、授权及需要人的决定和验收。</p>
+<p><a href="../../SKILL.md">SKILL.md</a></p>
+<h4>Skill与已采纳规则</h4><p>显式Skill / 已采纳规则</p><p>Skill仅显式调用；已采纳项目规则持续有效。</p>
+<p><a href="../../references/lifecycle.md">references/lifecycle.md</a></p>
+<h4>开发AI</h4><p>实施、选择检查与审阅</p><p>核对现场，实施和选择检查；审阅证据并接续授权工作。</p>
+<p><a href="../../references/lifecycle.md">references/lifecycle.md</a></p>
+<h4>项目记录与当前依据</h4><p>任务、设计与现行依据</p><p>需求/设计、任务/status和验证来源各有唯一职责。</p>
+<p><a href="../../references/cli.md">references/cli.md</a></p>
+<h4>项目检查与执行器</h4><p>真实命令、日志与RUN</p><p>文档模式复用项目命令；脚本模式执行指定检查、保存RUN。</p>
+<p><a href="../../scripts/harness.py">scripts/harness.py</a></p>
+<h4>交付审阅与人的验收</h4><p>证据、覆盖与验收分别判断</p><p>执行结果、证据有效、验收满足及人的确认分别判断。</p>
+<p><a href="../../references/verification.md">references/verification.md</a></p>
+<ul><li>owner → agent：目标、授权和人的决定</li><li>rules → agent：方法与项目约束</li><li>agent → project：维护范围内事实与任务</li><li>agent → checks：实施后执行适用检查</li><li>checks → review：真实记录和结果</li><li>project → review：范围、验收及相关依据</li><li>review → owner：结果、剩余事项和待人确认</li></ul></details></figure>
+<p class="muted">下面只切换讲解，不运行命令。</p><div class="buttons" role="group" aria-label="选择任务情景"><button type="button" aria-pressed="true" aria-controls="scene-ready" data-target="scene-ready">条件齐备</button><button type="button" aria-pressed="false" aria-controls="scene-failed" data-target="scene-failed">检查失败</button><button type="button" aria-pressed="false" aria-controls="scene-changed" data-target="scene-changed">输入变化</button><button type="button" aria-pressed="false" aria-controls="scene-resume" data-target="scene-resume">中断恢复</button></div><div><div id="scene-ready" class="panel" data-panel><h3>条件齐备</h3><p>执行通过仍需核对实际覆盖、有效证据、文档和必需人的确认。</p></div><div id="scene-failed" class="panel" data-panel><h3>检查失败</h3><p>保留失败，在授权范围定位和修复；不换更弱检查取得通过。</p></div><div id="scene-changed" class="panel" data-panel><h3>输入变化</h3><p>相关输入变化只重核受影响证据；无关新增不自动失效。</p></div><div id="scene-resume" class="panel" data-panel><h3>中断恢复</h3><p>先核对原任务、在途操作及副作用，再接续；不自动重放。</p></div></div>
+</section>
+<section id="structure"><h2>架构与协作｜结构、接口、数据与关键路径</h2>
+<p>能力包与消费项目数据分开：方法和工具在Skill内；目标、配置、任务、日志及验收证据在项目中。文档模式不要求机器数据块；脚本模式使用唯一任务块、真实RUN及派生status。</p>
+<figure class="map" data-map="1"><figcaption id="architecture-title-1">内部结构：实际脚本、规则、模板与消费项目数据</figcaption>
+<p class="map-hint">选择节点查看详情；聚焦仅沿已列关系。实线为主要关系，虚线为条件关系或反馈，点线为引用；是否必须依文字条件判断，推断/待核实另有文字标记。</p>
+<div class="map-controls"><label>查找节点 <input type="search" aria-label="查找图中节点" data-search></label><button type="button" data-direction="all">全图</button><button type="button" data-direction="upstream">上游</button><button type="button" data-direction="downstream">下游</button><label>路径终点 <select data-route-target aria-label="选择路径终点"><option value="">请选择</option><option value="entry">Skill入口与方法规则</option><option value="templates">assets职责模板</option><option value="harness">harness核心执行器</option><option value="scan">scan_coverage</option><option value="projectdata">消费项目配置、任务与RUN</option><option value="stop">可选codex_stop</option><option value="helpers">自检与计数适配</option><option value="snapshot">可选Git输入快照</option><option value="guide">可选工程导览工具</option></select></label><button type="button" data-route>显示路径</button></div>
+<p class="map-hint search-summary" role="status">未筛选节点。</p>
+<div class="map-scroll"><svg viewBox="0 0 990 805" role="group" aria-labelledby="architecture-title-1">
+<defs><marker id="arrow-1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10Z" fill="currentColor"/></marker></defs>
+<g class="map-group"><rect x="22" y="25" width="906" height="555" rx="12"/><text x="36" y="47">Skill能力包 · 方法、执行器及可选工具</text></g>
+<g class="map-group"><rect x="332" y="610" width="286" height="165" rx="12"/><text x="346" y="632">消费项目 · 事实与执行证据</text></g>
+<path class="edge primary" data-edge="0" d="M290.0 116.0L350.0 116.0" marker-end="url(#arrow-1)"><title>按职责选择模板</title></path>
+<g class="edge-label" data-for-edge="0"><rect x="294.0" y="87.0" width="52.0" height="24" rx="4"/><text x="320.0" y="103.0" text-anchor="middle">选模板</text></g>
+<path class="edge primary" data-edge="1" d="M475.0 172.0L475.0 213.5L423.5 213.5L423.5 255.0" marker-end="url(#arrow-1)"><title>core用于缺失文件接入</title></path>
+<g class="edge-label" data-for-edge="1"><rect x="415.6" y="184.5" width="67.4" height="24" rx="4"/><text x="449.2" y="200.5" text-anchor="middle">core模板</text></g>
+<path class="edge primary" data-edge="2" d="M350.0 311.0L290.0 311.0" marker-end="url(#arrow-1)"><title>加载覆盖校验</title></path>
+<g class="edge-label" data-for-edge="2"><rect x="300.0" y="282.0" width="40.0" height="24" rx="4"/><text x="320.0" y="298.0" text-anchor="middle">加载</text></g>
+<path class="edge primary" data-edge="3" d="M509.3 367.0L509.3 506.0L423.5 506.0L423.5 645.0" marker-end="url(#arrow-1)"><title>读写配置、任务、RUN及派生摘要</title></path>
+<g class="edge-label" data-for-edge="3"><rect x="465.3" y="407.5" width="88.0" height="24" rx="4"/><text x="509.3" y="423.5" text-anchor="middle">读写项目数据</text></g>
+<path class="edge reference" data-edge="4" d="M165.0 255.0L165.0 213.5L165.0 213.5L165.0 172.0" marker-end="url(#arrow-1)"><title>读取专项正文与ID</title></path>
+<g class="edge-label" data-for-edge="4"><rect x="126.2" y="205.2" width="77.7" height="24" rx="4"/><text x="165.0" y="221.2" text-anchor="middle">读取专项ID</text></g>
+<path class="edge optional" data-edge="5" d="M660.0 311.0L600.0 311.0" marker-end="url(#arrow-1)"><title>调用同一判定</title></path>
+<g class="edge-label" data-for-edge="5"><rect x="610.0" y="282.0" width="40.0" height="24" rx="4"/><text x="630.0" y="298.0" text-anchor="middle">调用</text></g>
+<path class="edge primary" data-edge="6" d="M785.0 172.0L785.0 213.5L526.5 213.5L526.5 255.0" marker-end="url(#arrow-1)"><title>通过实际入口自检</title></path>
+<g class="edge-label" data-for-edge="6"><rect x="611.8" y="184.5" width="88.0" height="24" rx="4"/><text x="655.8" y="200.5" text-anchor="middle">实际入口自检</text></g>
+<path class="edge reference" data-edge="7" d="M785.0 562.0L785.0 603.5L475.0 603.5L475.0 645.0" marker-end="url(#arrow-1)"><title>只读明确映射的来源；不改任务</title></path>
+<g class="edge-label" data-for-edge="7"><rect x="598.0" y="574.5" width="64.0" height="24" rx="4"/><text x="630.0" y="590.5" text-anchor="middle">明确来源</text></g>
+<path class="edge reference" data-edge="8" d="M165.0 562.0L165.0 603.5L526.5 603.5L526.5 645.0" marker-end="url(#arrow-1)"><title>可选输入身份材料；不自动互认</title></path>
+<g class="edge-label" data-for-edge="8"><rect x="313.8" y="574.5" width="64.0" height="24" rx="4"/><text x="345.8" y="590.5" text-anchor="middle">输入身份</text></g>
+<g class="node rule" role="button" tabindex="0" aria-label="Skill入口与方法规则" data-node="entry"><rect x="40" y="60" width="250" height="112" rx="9"/><text class="node-role" x="56" y="82">规则依据</text>
+<text class="node-title" x="56" y="108">Skill入口与方法规则</text>
+<text class="node-summary" x="56" y="147">方法路由与工程约束</text>
+<text class="basis" x="273" y="83" text-anchor="end">来源 1</text></g>
+<g class="node template" role="button" tabindex="0" aria-label="assets职责模板" data-node="templates"><rect x="350" y="60" width="250" height="112" rx="9"/><text class="node-role" x="366" y="82">模板资源</text>
+<text class="node-title" x="366" y="108">assets职责模板</text>
+<text class="node-summary" x="366" y="147">按实际职责选择与复用</text>
+<text class="basis" x="583" y="83" text-anchor="end">来源 1</text></g>
+<g class="node core" role="button" tabindex="0" aria-label="harness核心执行器" data-node="harness"><rect x="350" y="255" width="250" height="112" rx="9"/><text class="node-role" x="366" y="277">执行核心</text>
+<text class="node-title" x="366" y="303">harness核心执行器</text>
+<text class="node-summary" x="366" y="342">接入、执行与当前证据判定</text>
+<text class="basis" x="583" y="278" text-anchor="end">来源 1</text></g>
+<g class="node helper" role="button" tabindex="0" aria-label="scan_coverage" data-node="scan"><rect x="40" y="255" width="250" height="112" rx="9"/><text class="node-role" x="56" y="277">辅助工具</text>
+<text class="node-title" x="56" y="303">scan_coverage</text>
+<text class="node-summary" x="56" y="342">专项ID与覆盖结构</text>
+<text class="basis" x="273" y="278" text-anchor="end">来源 1</text></g>
+<g class="node data" role="button" tabindex="0" aria-label="消费项目配置、任务与RUN" data-node="projectdata"><rect x="350" y="645" width="250" height="112" rx="9"/><text class="node-role" x="366" y="667">项目数据</text>
+<text class="node-title" x="366" y="693">消费项目配置、任务与RUN</text>
+<text class="node-summary" x="366" y="732">配置、任务、RUN及状态摘要</text>
+<text class="basis" x="583" y="668" text-anchor="end">来源 1</text></g>
+<g class="node optional" role="button" tabindex="0" aria-label="可选codex_stop" data-node="stop"><rect x="660" y="255" width="250" height="112" rx="9"/><text class="node-role" x="676" y="277">可选能力</text>
+<text class="node-title" x="676" y="303">可选codex_stop</text>
+<text class="node-summary" x="676" y="342">显式平台绑定 / 有界补救</text>
+<text class="basis" x="893" y="278" text-anchor="end">来源 1</text></g>
+<g class="node helper" role="button" tabindex="0" aria-label="自检与计数适配" data-node="helpers"><rect x="660" y="60" width="250" height="112" rx="9"/><text class="node-role" x="676" y="82">辅助工具</text>
+<text class="node-title" x="676" y="108">自检与计数适配</text>
+<text class="node-summary" x="676" y="147">self_test / unittest_report</text>
+<text class="basis" x="893" y="83" text-anchor="end">来源 2</text></g>
+<g class="node optional" role="button" tabindex="0" aria-label="可选Git输入快照" data-node="snapshot"><rect x="40" y="450" width="250" height="112" rx="9"/><text class="node-role" x="56" y="472">可选能力</text>
+<text class="node-title" x="56" y="498">可选Git输入快照</text>
+<text class="node-summary" x="56" y="537">工作树、暂存、固定提交</text>
+<text class="basis" x="273" y="473" text-anchor="end">来源 1</text></g>
+<g class="node optional" role="button" tabindex="0" aria-label="可选工程导览工具" data-node="guide"><rect x="660" y="450" width="250" height="112" rx="9"/><text class="node-role" x="676" y="472">可选能力</text>
+<text class="node-title" x="676" y="498">可选工程导览工具</text>
+<text class="node-summary" x="676" y="537">同源展示 / 只读关系查询</text>
+<text class="basis" x="893" y="473" text-anchor="end">来源 1</text></g>
+</svg></div><p class="map-hint">图中短标签用于快速阅读；完整关系、条件和来源见节点详情或下方列表。</p><div class="node-detail" aria-live="polite"><p>选择节点查看完整说明、关系及来源。</p></div>
+<details><summary>全部节点、关系及来源</summary>
+<h4>Skill入口与方法规则</h4><p>方法路由与工程约束</p><p>通用方法及正文路由；不是后台调度器。</p>
+<p><a href="../../SKILL.md">SKILL.md</a></p>
+<h4>assets职责模板</h4><p>按实际职责选择与复用</p><p>core、optional和records按实际职责复用；不会自动创建所有可选文档。</p>
+<p><a href="../../references/templates.md">references/templates.md</a></p>
+<h4>harness核心执行器</h4><p>接入、执行与当前证据判定</p><p>adopt/doctor/任务更新、verify、共同assess、resume/close及run-after。</p>
+<p><a href="../../scripts/harness.py">scripts/harness.py</a></p>
+<h4>scan_coverage</h4><p>专项ID与覆盖结构</p><p>读取现行专项ID并核对覆盖结构，调查真实完成仍由语义审阅判断。</p>
+<p><a href="../../scripts/scan_coverage.py">scripts/scan_coverage.py</a></p>
+<h4>消费项目配置、任务与RUN</h4><p>配置、任务、RUN及状态摘要</p><p>在消费项目保存；状态摘要派生，不作为包内数据。</p>
+<p><a href="../../references/cli.md">references/cli.md</a></p>
+<h4>可选codex_stop</h4><p>显式平台绑定 / 有界补救</p><p>显式平台绑定；复用共同判定并提示有界补救，不执行项目测试。</p>
+<p><a href="../../scripts/codex_stop.py">scripts/codex_stop.py</a></p>
+<h4>自检与计数适配</h4><p>self_test / unittest_report</p><p>self_test通过子进程核对共同边界；unittest_report输出真实计数。</p>
+<p><a href="../../scripts/self_test.py">scripts/self_test.py</a></p>
+<p><a href="../../scripts/unittest_report.py">scripts/unittest_report.py</a></p>
+<h4>可选Git输入快照</h4><p>工作树、暂存、固定提交</p><p>读取Git对象与内容身份，不运行检查、不自动参加close。</p>
+<p><a href="../../scripts/evidence_snapshot.py">scripts/evidence_snapshot.py</a></p>
+<h4>可选工程导览工具</h4><p>同源展示 / 只读关系查询</p><p>读取Markdown/明确关系来源，生成离线HTML或只读查询；不发现全部依赖或判定工程验收。</p>
+<p><a href="../../scripts/project_guide.py">scripts/project_guide.py</a></p>
+<ul><li>entry → templates：按职责选择模板</li><li>templates → harness：core用于缺失文件接入</li><li>harness → scan：加载覆盖校验</li><li>harness → projectdata：读写配置、任务、RUN及派生摘要</li><li>scan → entry：读取专项正文与ID</li><li>stop → harness：调用同一判定</li><li>helpers → harness：通过实际入口自检</li><li>guide → projectdata：只读明确映射的来源；不改任务</li><li>snapshot → projectdata：可选输入身份材料；不自动互认</li></ul></details></figure>
+<figure class="map" data-map="2"><figcaption id="map-title-2">关键执行路径：从实际检查到有效交付</figcaption>
+<p class="map-hint">选择节点查看详情；聚焦仅沿已列关系。实线为主要关系，虚线为条件关系或反馈，点线为引用；是否必须依文字条件判断，推断/待核实另有文字标记。</p>
+<div class="map-controls"><label>查找节点 <input type="search" aria-label="查找图中节点" data-search></label><button type="button" data-direction="all">全图</button><button type="button" data-direction="upstream">上游</button><button type="button" data-direction="downstream">下游</button><label>路径终点 <select data-route-target aria-label="选择路径终点"><option value="">请选择</option><option value="scope">目标与验收范围</option><option value="run">verify真实执行</option><option value="valid">assess核对当前依据</option><option value="close">close与语义审阅</option><option value="recovery">失败或未知时恢复</option><option value="delivery">固定源、安装与远端</option></select></label><button type="button" data-route>显示路径</button></div>
+<p class="map-hint search-summary" role="status">未筛选节点。</p>
+<div class="map-scroll"><svg viewBox="0 0 990 610" role="group" aria-labelledby="map-title-2">
+<defs><marker id="arrow-2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10Z" fill="currentColor"/></marker></defs>
+<path class="edge primary" data-edge="0" d="M290.0 116.0L350.0 116.0" marker-end="url(#arrow-2)"><title>确定检查与相关输入</title></path>
+<g class="edge-label" data-for-edge="0"><rect x="300.0" y="87.0" width="40.0" height="24" rx="4"/><text x="320.0" y="103.0" text-anchor="middle">检查</text></g>
+<path class="edge primary" data-edge="1" d="M600.0 116.0L660.0 116.0" marker-end="url(#arrow-2)"><title>实际执行记录</title></path>
+<g class="edge-label" data-for-edge="1"><rect x="610.0" y="87.0" width="40.0" height="24" rx="4"/><text x="630.0" y="103.0" text-anchor="middle">记录</text></g>
+<path class="edge primary" data-edge="2" d="M750.7 172.0L750.7 213.5L785.0 213.5L785.0 255.0" marker-end="url(#arrow-2)"><title>当前机械条件支持范围内审阅</title></path>
+<g class="edge-label" data-for-edge="2"><rect x="706.7" y="197.8" width="88.0" height="24" rx="4"/><text x="750.7" y="213.8" text-anchor="middle">条件支持审阅</text></g>
+<path class="edge conditional" data-edge="3" d="M819.3 172.0L819.3 213.5L165.0 213.5L165.0 255.0" marker-end="url(#arrow-2)"><title>失败、失效或结局未知</title></path>
+<g class="edge-label" data-for-edge="3"><rect x="427.6" y="184.5" width="129.0" height="24" rx="4"/><text x="492.2" y="200.5" text-anchor="middle">失败 / 失效 / 未知</text></g>
+<path class="edge feedback" data-edge="4" d="M165.0 367.0L165.0 389.0L18.0 389.0L18.0 14.0L509.3 14.0L509.3 60.0" marker-end="url(#arrow-2)"><title>前置恢复后仅重验受影响检查</title></path>
+<g class="edge-label" data-for-edge="4"><rect x="225.7" y="19.0" width="76.0" height="24" rx="4"/><text x="263.7" y="35.0" text-anchor="middle">受影响复验</text></g>
+<path class="edge primary" data-edge="5" d="M785.0 367.0L785.0 408.5L785.0 408.5L785.0 450.0" marker-end="url(#arrow-2)"><title>已有交付授权及实际对象核对</title></path>
+<g class="edge-label" data-for-edge="5"><rect x="747.0" y="392.8" width="76.0" height="24" rx="4"/><text x="785.0" y="408.8" text-anchor="middle">授权内交付</text></g>
+<g class="node rule" role="button" tabindex="0" aria-label="目标与验收范围" data-node="scope"><rect x="40" y="60" width="250" height="112" rx="9"/><text class="node-role" x="56" y="82">规则依据</text>
+<text class="node-title" x="56" y="108">目标与验收范围</text>
+<text class="node-summary" x="56" y="147">目标、授权、验收与相关输入</text>
+<text class="basis" x="273" y="83" text-anchor="end">来源 1</text></g>
+<g class="node core" role="button" tabindex="0" aria-label="verify真实执行" data-node="run"><rect x="350" y="60" width="250" height="112" rx="9"/><text class="node-role" x="366" y="82">执行核心</text>
+<text class="node-title" x="366" y="108">verify真实执行</text>
+<text class="node-summary" x="366" y="147">真实命令及完整执行记录</text>
+<text class="basis" x="583" y="83" text-anchor="end">来源 1</text></g>
+<g class="node core" role="button" tabindex="0" aria-label="assess核对当前依据" data-node="valid"><rect x="660" y="60" width="250" height="112" rx="9"/><text class="node-role" x="676" y="82">执行核心</text>
+<text class="node-title" x="676" y="108">assess核对当前依据</text>
+<text class="node-summary" x="676" y="147">最近结果、输入和必要义务</text>
+<text class="basis" x="893" y="83" text-anchor="end">来源 1</text></g>
+<g class="node result" role="button" tabindex="0" aria-label="close与语义审阅" data-node="close"><rect x="660" y="255" width="250" height="112" rx="9"/><text class="node-role" x="676" y="277">结果与审阅</text>
+<text class="node-title" x="676" y="303">close与语义审阅</text>
+<text class="node-summary" x="676" y="342">实际差异与语义 / 人的确认</text>
+<text class="basis" x="893" y="278" text-anchor="end">来源 1</text></g>
+<g class="node process" role="button" tabindex="0" aria-label="失败或未知时恢复" data-node="recovery"><rect x="40" y="255" width="250" height="112" rx="9"/><text class="node-role" x="56" y="277">处理步骤</text>
+<text class="node-title" x="56" y="303">失败或未知时恢复</text>
+<text class="node-summary" x="56" y="342">定位缺口 / 核对未知操作</text>
+<text class="basis" x="273" y="278" text-anchor="end">来源 1</text></g>
+<g class="node result" role="button" tabindex="0" aria-label="固定源、安装与远端" data-node="delivery"><rect x="660" y="450" width="250" height="112" rx="9"/><text class="node-role" x="676" y="472">结果与审阅</text>
+<text class="node-title" x="676" y="498">固定源、安装与远端</text>
+<text class="node-summary" x="676" y="537">固定包、备份、副本、远端</text>
+<text class="basis" x="893" y="473" text-anchor="end">来源 1</text></g>
+</svg></div><p class="map-hint">图中短标签用于快速阅读；完整关系、条件和来源见节点详情或下方列表。</p><div class="node-detail" aria-live="polite"><p>选择节点查看完整说明、关系及来源。</p></div>
+<details><summary>全部节点、关系及来源</summary>
+<h4>目标与验收范围</h4><p>目标、授权、验收与相关输入</p><p>任务中的目标、授权和验收映射决定本次需要什么证据。</p>
+<p><a href="../../references/cli.md">references/cli.md</a></p>
+<h4>verify真实执行</h4><p>真实命令及完整执行记录</p><p>读取相关输入，执行命令并保留退出、日志、计数、环境和身份。</p>
+<p><a href="../../scripts/harness.py">scripts/harness.py</a></p>
+<h4>assess核对当前依据</h4><p>最近结果、输入和必要义务</p><p>最近结果、指纹、日志/报告完整性及必需义务参与共同判定。</p>
+<p><a href="../../scripts/harness.py">scripts/harness.py</a></p>
+<h4>close与语义审阅</h4><p>实际差异与语义 / 人的确认</p><p>机械条件成立后核对实际差异/覆盖/文档/人的确认，不能自签主观接受。</p>
+<p><a href="../../references/verification.md">references/verification.md</a></p>
+<h4>失败或未知时恢复</h4><p>定位缺口 / 核对未知操作</p><p>保留失败；相关变化只重验受影响部分；未知副作用先核对现场。</p>
+<p><a href="../../references/lifecycle.md">references/lifecycle.md</a></p>
+<h4>固定源、安装与远端</h4><p>固定包、备份、副本、远端</p><p>固定交付范围；安装、发布授权与实际对象核对分别记录，示例不证明这些动作已完成。</p>
+<p><a href="../../references/lifecycle.md">references/lifecycle.md</a></p>
+<ul><li>scope → run：确定检查与相关输入</li><li>run → valid：实际执行记录</li><li>valid → close：当前机械条件支持范围内审阅</li><li>valid → recovery：失败、失效或结局未知</li><li>recovery → run：前置恢复后仅重验受影响检查</li><li>close → delivery：已有交付授权及实际对象核对</li></ul></details></figure>
+<p>项目写入限制在根目录内，短事务使用文件锁与原子替换；执行检查时释放锁。超时/中断处理进程组，不能确认清理或副作用时保留未知。恢复摘要不重复执行原动作。Stop适配是可选平台能力，不能宣称不可绕过。</p><p class="source"><a href="../../references/cli.md">接口与存储契约</a> · <a href="../../references/cli.md">实际存储和命令契约</a> · <a href="../../references/codex-hooks.md">平台适配</a></p>
+</section>
+<section id="choices"><h2>关键取舍｜为什么采用这些结构</h2>
+<details open><summary>开发AI主导执行，机制提供工程依据</summary><p>用户决定目标与授权；开发AI选择实施方式；工具保存事实、执行选定检查并核对可机械判断的条件。</p></details><details><summary>项目事实唯一，导览派生</summary><p>需求、设计、任务、状态和验证各有维护位置。导览只摘要回查；图定义、说明和正文同源，不建立第二套任务状态。</p></details><details><summary>按影响验证并复用仍有效证据</summary><p>先界定真实输入与消费者，相关变化重验；测试计数、版本号或节点标记不能代替当前覆盖与身份。</p></details><details><summary>通用功能按需组合</summary><p>导览工具可独立使用，不加入close、不调用模型或联网、不强制新运行平台。参考外部功能设计，保留本机制的最小充分边界。</p></details><p class="source"><a href="../../references/cli.md">接口与存储契约</a> · <a href="../../references/maintenance.md">维护与裁剪</a></p>
+</section>
+<section id="engineering"><h2>工程态势｜参考快照与后续使用</h2>
+<p>本包包含工程导览方法、模板、生成与检查工具，以及这份项目阅读示例。开发仓库的任务、安装回执、测试日志、实时计划和待办不随包；不能从此示例推断最新进度、验证或发布状态。</p><p>后续改进由真实使用反馈和明确授权触发。跨项目净收益、长期效率及普遍AI遵从尚未证明。</p><p class="source"><a href="../../references/maintenance.md">维护与回顾规则</a> · <a href="../../references/verification.md">验证与交付边界</a></p>
+</section>
+<section id="limits"><h2>当前限制｜运行、验证与未完成边界</h2>
+<p>核心运行需要Python3.10+，声明平台macOS/Linux；新导览工具只使用标准库，生成离线HTML，明确输入变化后可只读核对漂移。普通来源链接不自动成为相关输入，实际使用时仍需对照阅读/生成关系补齐映射。</p><p>图的来源路径/行号及内容身份可机械核对，但关系含义、运行影响、项目验收和人的理解仍分别判断。上游/下游只沿本图已列关系；没有自动全语言知识图谱、实时看板、后台同步或云服务。</p><p>安装、推送与客户端加载分别记录，不宣称会话自动重载。工程检查和代表消费样例只支持其范围；其他平台、任意规模和长期理解收益仍未认证。</p><p class="source"><a href="../../references/verification.md">验证规则与证据边界</a> · <a href="../../references/cli.md">运行接口与环境</a></p><footer>独立离线导览 · 正文及图定义来自本Markdown源 · 快照身份与最新状态分别阅读。</footer>
+</section></main>
+<script type="application/json" id="engineering-data">{"graphs":[{"edges":[{"basis":"observed","category":"primary","from":"owner","label":"目标、授权和人的决定","short_label":"目标与授权","to":"agent"},{"basis":"observed","category":"primary","from":"rules","label":"方法与项目约束","short_label":"工程约束","to":"agent"},{"basis":"observed","category":"primary","from":"agent","label":"维护范围内事实与任务","short_label":"维护事实","to":"project"},{"basis":"observed","category":"primary","from":"agent","label":"实施后执行适用检查","short_label":"实际执行","to":"checks"},{"basis":"observed","category":"primary","from":"checks","label":"真实记录和结果","short_label":"真实结果","to":"review"},{"basis":"observed","category":"primary","from":"project","label":"范围、验收及相关依据","short_label":"范围与依据","to":"review"},{"basis":"observed","category":"feedback","from":"review","label":"结果、剩余事项和待人确认","short_label":"结果 / 待人确认","to":"owner"}],"kind":"collaboration","nodes":[{"basis":"observed","description":"确定目标、范围、授权及需要人的决定和验收。","id":"owner","label":"项目负责人","position":{"column":0,"row":0},"role":"actor","sources":[{"path":"SKILL.md"}],"summary":"目标、授权与人的决定"},{"basis":"observed","description":"Skill仅显式调用；已采纳项目规则持续有效。","id":"rules","label":"Skill与已采纳规则","position":{"column":2,"row":0},"role":"rule","sources":[{"path":"references/lifecycle.md"}],"summary":"显式Skill / 已采纳规则"},{"basis":"observed","description":"核对现场，实施和选择检查；审阅证据并接续授权工作。","id":"agent","label":"开发AI","position":{"column":1,"row":1},"role":"core","sources":[{"path":"references/lifecycle.md"}],"summary":"实施、选择检查与审阅"},{"basis":"observed","description":"需求/设计、任务/status和验证来源各有唯一职责。","id":"project","label":"项目记录与当前依据","position":{"column":0,"row":2},"role":"data","sources":[{"path":"references/cli.md"}],"summary":"任务、设计与现行依据"},{"basis":"observed","description":"文档模式复用项目命令；脚本模式执行指定检查、保存RUN。","id":"checks","label":"项目检查与执行器","position":{"column":2,"row":2},"role":"helper","sources":[{"path":"scripts/harness.py"}],"summary":"真实命令、日志与RUN"},{"basis":"observed","description":"执行结果、证据有效、验收满足及人的确认分别判断。","id":"review","label":"交付审阅与人的验收","position":{"column":1,"row":3},"role":"result","sources":[{"path":"references/verification.md"}],"summary":"证据、覆盖与验收分别判断"}],"sources":{"agent":[{"href":"../../references/lifecycle.md","path":"references/lifecycle.md","sha256":"e3b6e2fcba7a9cffccf64f583e9057a907b60ece6d74ea5fdf906686bf8f36d8"}],"checks":[{"href":"../../scripts/harness.py","path":"scripts/harness.py","sha256":"11a04ea136789bebcd95262a942e68a673b6b60f451f937bd0fdc7602e494ec2"}],"owner":[{"href":"../../SKILL.md","path":"SKILL.md","sha256":"962f1580001cec9f289fb681db069648ac588548f8188dc1c62ffd7c43483dfe"}],"project":[{"href":"../../references/cli.md","path":"references/cli.md","sha256":"bfdacc2d42b79f26077e9dfe5a6e511ea65bf426314eb73aac5a7661f446b98a"}],"review":[{"href":"../../references/verification.md","path":"references/verification.md","sha256":"7bdea4be499563aed293725cbb500536f385befb72f5d64ec3013d7cf6ec753b"}],"rules":[{"href":"../../references/lifecycle.md","path":"references/lifecycle.md","sha256":"e3b6e2fcba7a9cffccf64f583e9057a907b60ece6d74ea5fdf906686bf8f36d8"}]},"title":"使用与协作：目标、执行、验证和反馈"},{"edges":[{"basis":"observed","category":"primary","from":"entry","label":"按职责选择模板","short_label":"选模板","to":"templates"},{"basis":"observed","category":"primary","from":"templates","label":"core用于缺失文件接入","short_label":"core模板","to":"harness"},{"basis":"observed","category":"primary","from":"harness","label":"加载覆盖校验","short_label":"加载","to":"scan"},{"basis":"observed","category":"primary","from":"harness","label":"读写配置、任务、RUN及派生摘要","short_label":"读写项目数据","to":"projectdata"},{"basis":"observed","category":"reference","from":"scan","label":"读取专项正文与ID","short_label":"读取专项ID","to":"entry"},{"basis":"observed","category":"optional","from":"stop","label":"调用同一判定","short_label":"调用","to":"harness"},{"basis":"observed","category":"primary","from":"helpers","label":"通过实际入口自检","short_label":"实际入口自检","to":"harness"},{"basis":"observed","category":"reference","from":"guide","label":"只读明确映射的来源；不改任务","short_label":"明确来源","to":"projectdata"},{"basis":"observed","category":"reference","from":"snapshot","label":"可选输入身份材料；不自动互认","short_label":"输入身份","to":"projectdata"}],"groups":[{"id":"skill","label":"Skill能力包 · 方法、执行器及可选工具","members":["entry","templates","harness","scan","stop","helpers","snapshot","guide"]},{"id":"consumer","label":"消费项目 · 事实与执行证据","members":["projectdata"]}],"kind":"architecture","nodes":[{"basis":"observed","description":"通用方法及正文路由；不是后台调度器。","id":"entry","label":"Skill入口与方法规则","position":{"column":0,"row":0},"role":"rule","sources":[{"path":"SKILL.md"}],"summary":"方法路由与工程约束"},{"basis":"observed","description":"core、optional和records按实际职责复用；不会自动创建所有可选文档。","id":"templates","label":"assets职责模板","position":{"column":1,"row":0},"role":"template","sources":[{"path":"references/templates.md"}],"summary":"按实际职责选择与复用"},{"basis":"observed","description":"adopt/doctor/任务更新、verify、共同assess、resume/close及run-after。","id":"harness","label":"harness核心执行器","position":{"column":1,"row":1},"role":"core","sources":[{"path":"scripts/harness.py"}],"summary":"接入、执行与当前证据判定"},{"basis":"observed","description":"读取现行专项ID并核对覆盖结构，调查真实完成仍由语义审阅判断。","id":"scan","label":"scan_coverage","position":{"column":0,"row":1},"role":"helper","sources":[{"path":"scripts/scan_coverage.py"}],"summary":"专项ID与覆盖结构"},{"basis":"observed","description":"在消费项目保存；状态摘要派生，不作为包内数据。","id":"projectdata","label":"消费项目配置、任务与RUN","position":{"column":1,"row":3},"role":"data","sources":[{"path":"references/cli.md"}],"summary":"配置、任务、RUN及状态摘要"},{"basis":"observed","description":"显式平台绑定；复用共同判定并提示有界补救，不执行项目测试。","id":"stop","label":"可选codex_stop","position":{"column":2,"row":1},"role":"optional","sources":[{"path":"scripts/codex_stop.py"}],"summary":"显式平台绑定 / 有界补救"},{"basis":"observed","description":"self_test通过子进程核对共同边界；unittest_report输出真实计数。","id":"helpers","label":"自检与计数适配","position":{"column":2,"row":0},"role":"helper","sources":[{"path":"scripts/self_test.py"},{"path":"scripts/unittest_report.py"}],"summary":"self_test / unittest_report"},{"basis":"observed","description":"读取Git对象与内容身份，不运行检查、不自动参加close。","id":"snapshot","label":"可选Git输入快照","position":{"column":0,"row":2},"role":"optional","sources":[{"path":"scripts/evidence_snapshot.py"}],"summary":"工作树、暂存、固定提交"},{"basis":"observed","description":"读取Markdown/明确关系来源，生成离线HTML或只读查询；不发现全部依赖或判定工程验收。","id":"guide","label":"可选工程导览工具","position":{"column":2,"row":2},"role":"optional","sources":[{"path":"scripts/project_guide.py"}],"summary":"同源展示 / 只读关系查询"}],"sources":{"entry":[{"href":"../../SKILL.md","path":"SKILL.md","sha256":"962f1580001cec9f289fb681db069648ac588548f8188dc1c62ffd7c43483dfe"}],"guide":[{"href":"../../scripts/project_guide.py","path":"scripts/project_guide.py","sha256":"a56829e7fff6aae1213a0a5860ac5d4515481d94a042932746996107dbad5bae"}],"harness":[{"href":"../../scripts/harness.py","path":"scripts/harness.py","sha256":"11a04ea136789bebcd95262a942e68a673b6b60f451f937bd0fdc7602e494ec2"}],"helpers":[{"href":"../../scripts/self_test.py","path":"scripts/self_test.py","sha256":"ae3d85682b09df9e9b904ae1e290a4d38f5f4f70d6dc3ad884af52297dc6b14f"},{"href":"../../scripts/unittest_report.py","path":"scripts/unittest_report.py","sha256":"73a42b1febfc22af96207fc4bb246292eab491404dd5906f3b6e07f9a1ce5e75"}],"projectdata":[{"href":"../../references/cli.md","path":"references/cli.md","sha256":"bfdacc2d42b79f26077e9dfe5a6e511ea65bf426314eb73aac5a7661f446b98a"}],"scan":[{"href":"../../scripts/scan_coverage.py","path":"scripts/scan_coverage.py","sha256":"b9d3aceb4cf3a0453d052c83893d587cee0a6b555dcd25bb7ba35afb1c728690"}],"snapshot":[{"href":"../../scripts/evidence_snapshot.py","path":"scripts/evidence_snapshot.py","sha256":"95ff9b421199ba38a2d38ad6bab4137ed71b8108cb4442023e550212e3173c2f"}],"stop":[{"href":"../../scripts/codex_stop.py","path":"scripts/codex_stop.py","sha256":"534b5d1619c34640b0aad70a9f95fdf2c79960d2d400ec013ef4f9f8c45452e0"}],"templates":[{"href":"../../references/templates.md","path":"references/templates.md","sha256":"cfd435e56d1db2724d90a3eaafcf98ad12d4450a559db35811db00234fcc9b04"}]},"title":"内部结构：实际脚本、规则、模板与消费项目数据"},{"edges":[{"basis":"observed","category":"primary","from":"scope","label":"确定检查与相关输入","short_label":"检查","to":"run"},{"basis":"observed","category":"primary","from":"run","label":"实际执行记录","short_label":"记录","to":"valid"},{"basis":"observed","category":"primary","from":"valid","label":"当前机械条件支持范围内审阅","short_label":"条件支持审阅","to":"close"},{"basis":"observed","category":"conditional","from":"valid","label":"失败、失效或结局未知","short_label":"失败 / 失效 / 未知","to":"recovery"},{"basis":"observed","category":"feedback","from":"recovery","label":"前置恢复后仅重验受影响检查","short_label":"受影响复验","to":"run"},{"basis":"observed","category":"primary","from":"close","label":"已有交付授权及实际对象核对","short_label":"授权内交付","to":"delivery"}],"kind":"workflow","nodes":[{"basis":"observed","description":"任务中的目标、授权和验收映射决定本次需要什么证据。","id":"scope","label":"目标与验收范围","position":{"column":0,"row":0},"role":"rule","sources":[{"path":"references/cli.md"}],"summary":"目标、授权、验收与相关输入"},{"basis":"observed","description":"读取相关输入，执行命令并保留退出、日志、计数、环境和身份。","id":"run","label":"verify真实执行","position":{"column":1,"row":0},"role":"core","sources":[{"path":"scripts/harness.py"}],"summary":"真实命令及完整执行记录"},{"basis":"observed","description":"最近结果、指纹、日志/报告完整性及必需义务参与共同判定。","id":"valid","label":"assess核对当前依据","position":{"column":2,"row":0},"role":"core","sources":[{"path":"scripts/harness.py"}],"summary":"最近结果、输入和必要义务"},{"basis":"observed","description":"机械条件成立后核对实际差异/覆盖/文档/人的确认，不能自签主观接受。","id":"close","label":"close与语义审阅","position":{"column":2,"row":1},"role":"result","sources":[{"path":"references/verification.md"}],"summary":"实际差异与语义 / 人的确认"},{"basis":"observed","description":"保留失败；相关变化只重验受影响部分；未知副作用先核对现场。","id":"recovery","label":"失败或未知时恢复","position":{"column":0,"row":1},"role":"process","sources":[{"path":"references/lifecycle.md"}],"summary":"定位缺口 / 核对未知操作"},{"basis":"observed","description":"固定交付范围；安装、发布授权与实际对象核对分别记录，示例不证明这些动作已完成。","id":"delivery","label":"固定源、安装与远端","position":{"column":2,"row":2},"role":"result","sources":[{"path":"references/lifecycle.md"}],"summary":"固定包、备份、副本、远端"}],"sources":{"close":[{"href":"../../references/verification.md","path":"references/verification.md","sha256":"7bdea4be499563aed293725cbb500536f385befb72f5d64ec3013d7cf6ec753b"}],"delivery":[{"href":"../../references/lifecycle.md","path":"references/lifecycle.md","sha256":"e3b6e2fcba7a9cffccf64f583e9057a907b60ece6d74ea5fdf906686bf8f36d8"}],"recovery":[{"href":"../../references/lifecycle.md","path":"references/lifecycle.md","sha256":"e3b6e2fcba7a9cffccf64f583e9057a907b60ece6d74ea5fdf906686bf8f36d8"}],"run":[{"href":"../../scripts/harness.py","path":"scripts/harness.py","sha256":"11a04ea136789bebcd95262a942e68a673b6b60f451f937bd0fdc7602e494ec2"}],"scope":[{"href":"../../references/cli.md","path":"references/cli.md","sha256":"bfdacc2d42b79f26077e9dfe5a6e511ea65bf426314eb73aac5a7661f446b98a"}],"valid":[{"href":"../../scripts/harness.py","path":"scripts/harness.py","sha256":"11a04ea136789bebcd95262a942e68a673b6b60f451f937bd0fdc7602e494ec2"}]},"title":"关键执行路径：从实际检查到有效交付"}],"inputs":{"$renderer":"a56829e7fff6aae1213a0a5860ac5d4515481d94a042932746996107dbad5bae","$shell":"60f6fc0f95b6783fc9b1458371d1cad0e7bc890c2a49f20c9dbca16997bd42b7","SKILL.md":"962f1580001cec9f289fb681db069648ac588548f8188dc1c62ffd7c43483dfe","examples/project-guide/project-guide.md":"8d70c1e2d99e3ed48560fe2660d17e107e0f5c6f0be18be66a6443963083d837","references/cli.md":"bfdacc2d42b79f26077e9dfe5a6e511ea65bf426314eb73aac5a7661f446b98a","references/lifecycle.md":"e3b6e2fcba7a9cffccf64f583e9057a907b60ece6d74ea5fdf906686bf8f36d8","references/maintenance.md":"ceac54a7ccbd49f08b243b2062d3de22629caa0e9deaef9d285cb6de9a9a2513","references/templates.md":"cfd435e56d1db2724d90a3eaafcf98ad12d4450a559db35811db00234fcc9b04","references/verification.md":"7bdea4be499563aed293725cbb500536f385befb72f5d64ec3013d7cf6ec753b","scripts/codex_stop.py":"534b5d1619c34640b0aad70a9f95fdf2c79960d2d400ec013ef4f9f8c45452e0","scripts/evidence_snapshot.py":"95ff9b421199ba38a2d38ad6bab4137ed71b8108cb4442023e550212e3173c2f","scripts/harness.py":"11a04ea136789bebcd95262a942e68a673b6b60f451f937bd0fdc7602e494ec2","scripts/project_guide.py":"a56829e7fff6aae1213a0a5860ac5d4515481d94a042932746996107dbad5bae","scripts/scan_coverage.py":"b9d3aceb4cf3a0453d052c83893d587cee0a6b555dcd25bb7ba35afb1c728690","scripts/self_test.py":"ae3d85682b09df9e9b904ae1e290a4d38f5f4f70d6dc3ad884af52297dc6b14f","scripts/unittest_report.py":"73a42b1febfc22af96207fc4bb246292eab491404dd5906f3b6e07f9a1ce5e75"}}</script>
+<script>
+'use strict';
+const model=JSON.parse(document.getElementById('engineering-data').textContent);
+const basisNames={observed:'有依据',inferred:'推断',unknown:'待核实'};
+for(const figure of document.querySelectorAll('[data-map]')){
+  const graph=model.graphs[Number(figure.dataset.map)];let selected=null,direction='all';
+  const detail=figure.querySelector('.node-detail');
+  function element(tag,text){const item=document.createElement(tag);item.textContent=text;return item;}
+  function reach(seed,mode){const seen=new Set([seed]),queue=[seed];while(queue.length){const current=queue.shift();for(const edge of graph.edges){const a=mode==='upstream'?edge.to:edge.from,b=mode==='upstream'?edge.from:edge.to;if(a===current&&!seen.has(b)){seen.add(b);queue.push(b);}}}return seen;}
+  function route(seed,target){const queue=[{node:seed,nodes:[seed],edges:[]}],seen=new Set([seed]);while(queue.length){const item=queue.shift();if(item.node===target)return item;for(let i=0;i<graph.edges.length;i++){const edge=graph.edges[i];if(edge.from===item.node&&!seen.has(edge.to)){seen.add(edge.to);queue.push({node:edge.to,nodes:[...item.nodes,edge.to],edges:[...item.edges,i]});}}}return null;}
+  function paint(){
+    const path=direction==='route'?route(selected,figure.querySelector('[data-route-target]').value):null;
+    const hits=direction==='route'?new Set(path?path.nodes:[selected]):selected&&direction!=='all'?reach(selected,direction):new Set(graph.nodes.map(node=>node.id));
+    for(const item of figure.querySelectorAll('[data-node]')){item.classList.toggle('selected',item.dataset.node===selected);item.classList.toggle('dim',!hits.has(item.dataset.node));item.setAttribute('aria-pressed',String(item.dataset.node===selected));}
+    for(const item of figure.querySelectorAll('[data-edge]')){const edge=graph.edges[Number(item.dataset.edge)];const active=direction==='route'?Boolean(path&&path.edges.includes(Number(item.dataset.edge))):hits.has(edge.from)&&hits.has(edge.to);item.classList.toggle('dim',!active);item.classList.toggle('reached',direction!=='all'&&active);}
+    for(const label of figure.querySelectorAll('[data-for-edge]'))label.classList.toggle('dim',figure.querySelector('[data-edge="'+label.dataset.forEdge+'"]').classList.contains('dim'));
+    for(const button of figure.querySelectorAll('[data-direction]'))button.setAttribute('aria-pressed',String(button.dataset.direction===direction));
+  }
+  function choose(id){
+    if(direction==='route')direction='all';selected=id;const node=graph.nodes.find(item=>item.id===id);detail.replaceChildren(element('h3',node.label),element('p',basisNames[node.basis||'observed']+' · '+(node.description||'没有补充说明')));
+    if(node.summary)detail.append(element('p',node.summary));
+    const edges=graph.edges.filter(edge=>edge.from===id||edge.to===id);const list=element('ul','');for(const edge of edges){const from=graph.nodes.find(item=>item.id===edge.from).label,to=graph.nodes.find(item=>item.id===edge.to).label;list.append(element('li',from+' → '+to+'：'+edge.label+'（'+basisNames[edge.basis||'observed']+'）'));}detail.append(list);
+    const refs=graph.sources[id];if(!refs.length)detail.append(element('p','未提供可定位来源；标记由源内容作者填写。'));
+    for(const ref of refs){const p=element('p','来源：'),a=element('a',ref.path);a.href=ref.href;p.append(a);if(ref.line)p.append(element('span',' · 行 '+ref.line+'–'+ref.end_line));detail.append(p);const hash=element('code','内容身份 '+ref.sha256);detail.append(hash);}
+    detail.append(element('p','来源定位与内容身份已核对；关系含义和工程验收仍需相应依据。'));paint();
+  }
+  figure.querySelector('[data-route]').addEventListener('click',()=>{const target=figure.querySelector('[data-route-target]').value;if(!selected||!target){figure.querySelector('.search-summary').textContent='先选择起点节点和路径终点。';return;}const path=route(selected,target);direction='route';figure.querySelector('.search-summary').textContent=path?'已列有向路径：'+path.nodes.map(id=>graph.nodes.find(node=>node.id===id).label).join(' → '):'本图没有已列路径；不能据此判断真实系统没有关系。';paint();});
+  for(const node of figure.querySelectorAll('[data-node]')){node.addEventListener('click',()=>choose(node.dataset.node));node.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();choose(node.dataset.node);}});}
+  for(const button of figure.querySelectorAll('[data-direction]'))button.addEventListener('click',()=>{if(!selected&&direction!=='all')return;direction=button.dataset.direction;if(!selected&&direction!=='all')choose(graph.nodes[0].id);paint();});
+  figure.querySelector('[data-search]').addEventListener('input',event=>{const value=event.target.value.trim().toLowerCase(),matches=graph.nodes.filter(node=>node.label.toLowerCase().includes(value)||String(node.description||'').toLowerCase().includes(value));figure.querySelector('.search-summary').textContent=!value?'未筛选节点。':matches.length?'找到 '+matches.length+' 个节点。':'没有匹配节点。';if(value&&matches.length===1)choose(matches[0].id);else{direction='all';paint();for(const node of figure.querySelectorAll('[data-node]'))node.classList.toggle('dim',Boolean(value)&&!matches.some(item=>item.id===node.dataset.node));}});
+  paint();
+}
+for(const button of document.querySelectorAll('[data-target]'))button.addEventListener('click',()=>{for(const item of document.querySelectorAll('[data-target]'))item.setAttribute('aria-pressed',String(item===button));for(const panel of document.querySelectorAll('[data-panel]'))panel.hidden=panel.id!==button.dataset.target;});
+for(const button of document.querySelectorAll('[data-target][aria-pressed=true]'))button.click();
+</script></body></html>
