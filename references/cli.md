@@ -305,3 +305,47 @@ python3 /实际位置/ai-sdlc/scripts/evidence_snapshot.py --root /项目根目�
 输出记录source、固定对象identity（工作树为null）、去重paths、files的SHA-256/执行权限或missing、files_sha256及采集起止时间。files_sha256只用于比较文件集合、内容与权限，不包含选择范围、对象来源或未匹配项；比较时同时核对这些字段。输出父目录须已存在，输出必须在选择范围外且不存在；排他创建拒绝覆盖旧文件。工具不读取文件正文到报告，但路径和散列仍应按项目隐私范围保留，不自动上传。
 
 此清单不冻结工作树、不能证明扫描语义或环境相同；捕获期间并发变化可能得到混合状态。暂停相关写入、采证前后重取新快照并按风险核对，不能用两次相同证明中间未变化。检查应实际读取所声明的对象；要检查暂存/提交内容，可在隔离导出目录执行现有检查。不要只检查工作树的git diff后宣称暂存区已验收。历史快照保持原样，工具不替代现行RUN失效检查。
+
+## 可选工程导览工具
+
+独立scripts/project_guide.py随包提供，Python3.10+标准库。文档/脚本模式均可选用，也可继续复用项目文档站或生成器；不加入harness close、不自动接入或更改项目状态。不执行检查/模型/网络请求，不自动发现依赖或判断工程完成。
+
+```sh
+python3 /实际Skill位置/scripts/project_guide.py build --root /项目目录
+python3 /实际Skill位置/scripts/project_guide.py check --root /项目目录
+python3 /实际Skill位置/scripts/project_guide.py inspect --root /项目目录 --view 0 --node reader --direction downstream
+```
+
+默认源docs/project-guide.md、输出docs/project-guide.html，可用--source/--output指定项目根内相对路径（输出限.html/.htm）；inspect的--view为围栏出现顺序从0起，方向upstream/downstream，只读已有图；可加--target终点查询from→to的已列有向最短路径，不与upstream组合，无路径返回path=null（不是完整系统无关系的证明）。输入需UTF-8；stdout为结果/结构化查询，坏参数/来源/图返回非零且不替换旧HTML；check只读完整比较当前源、明确来源内容身份及渲染器/外壳。文件变更不自动刷新历史快照，按原授权核对后build。来源对应仅证明可定位和身份，不证明关系含义/真实运行影响或验收。
+
+内容源首先写guide-meta JSON注释，再写唯一#主标题及##板块，板块可加{#id}。普通段落、Markdown链接、三级标题、列表和代码围栏可用；不是完整Markdown方言。html围栏只接受受控展示标签/属性，不接受script、iframe、事件属性或javascript链接。旧受控SVG图可保留，新工具图用engineering-map围栏。正文/图要使用的相关文件应在meta.sources或节点sources明确映射，遗漏依赖程序无法自动发现；普通进一步阅读链接不自动成为内容输入。
+
+```json
+{
+  "title": "项目工程导览",
+  "date": "真实核对日期",
+  "version": "本次项目版本",
+  "identity": "实际提交或内容范围",
+  "scope": "来源与已核对范围；未确认计划明确说明",
+  "sources": ["README.md"],
+  "required_views": ["collaboration", "architecture"]
+}
+```
+
+required_views至少保留使用/协作和内部架构两个视角（默认两者），与现行导览要求一致；其他类型按实际理解需要选用，不因工具支持就强制增加。节点和关系均可写basis=observed/inferred/unknown，默认observed是作者声称有依据而非程序认证；即使来源存在仍须语义核对。来源path为根内相对路径，可选line/end_line必须落在真实UTF-8文件内；HTML提供路径及行号说明，行号不保证普通浏览器能自动定位编辑器。
+
+```json
+{
+  "kind": "architecture",
+  "title": "内部结构与关键关系",
+  "nodes": [
+    {"id": "entry", "label": "执行入口", "description": "实际职责与限制", "sources": [{"path": "README.md"}]},
+    {"id": "result", "label": "执行结果", "basis": "unknown"}
+  ],
+  "edges": [{"from": "entry", "to": "result", "label": "实际关系说明", "basis": "inferred"}]
+}
+```
+
+kind还支持collaboration/workflow/dataflow/lifecycle。可选node.position={column,row}安排层次（0–100整数，不重叠），role=component/actor/rule/template/core/data/helper/process/optional/result和summary组织节点视觉层级；可选groups[{id,label,members}]标记真实边界，成员不得重复或把非成员圈入边界。edge.category=primary/conditional/optional/feedback/reference及short_label仅表达作者已核对关系，不能凭样式推断事实。端口分散、正交走线和短标签辅助阅读，密集关系仍按节点详情/静态列表回查，不承诺所有图自动达到最佳布局。每图1–200节点、0–1000关系，稳定ID不重复且端点必须存在；上限是工具保护，不是推荐首页密度或理解效果承诺。build校验后以同目录候选原子替换；拒绝输出覆盖源、明确来源、生成器/展示资产、符号链接/硬链接别名及根外路径。输入根是用户指定项目，不支持将不可信网页或任意目录当作项目授权。JS数据和文本转义，静态节点/关系/来源详情仍可阅读；浏览器中选择节点、查询文字、两节点路径和上下游聚焦不运行工程动作。
+
+维护：工具/展示资产及上述可选接口变化时更新本节，消费项目已选输入变化按原验证策略核对；模板/工程事实仍沿各自唯一来源维护，不增第二套流水线或强制JSON台账。
