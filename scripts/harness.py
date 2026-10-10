@@ -19,7 +19,7 @@ import fcntl
 import importlib.util
 from urllib.parse import unquote, urlsplit
 
-VERSION = '1.5.2-dev.0'
+VERSION = '1.5.3-dev.0'
 TASK_STATE_LABELS = {'not_started': '未开始', 'in_progress': '进行中', 'blocked': '阻塞',
                      'interrupted': '已中断', 'completed': '已完成', 'cancelled': '已取消'}
 PACKAGE = Path(__file__).resolve().parents[1]
@@ -59,6 +59,15 @@ def now():
 def digest(value):
     raw = value if isinstance(value, bytes) else json.dumps(value, sort_keys=True, ensure_ascii=False).encode()
     return hashlib.sha256(raw).hexdigest()
+
+def file_digest(path):
+    """SHA-256 of complete file bytes with bounded read buffers."""
+    result = hashlib.sha256()
+    with path.open('rb') as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+            result.update(chunk)
+    return result.hexdigest()
+
 
 def load(path):
     try:
@@ -1074,7 +1083,7 @@ def verify(root, c, tid, cid):
     finally:
         rec['finished_at'] = None if rec['overall_status'] == 'running' else now()
         logpath = safe(root, run + '/output.log')
-        rec['log_sha256'] = digest(logpath.read_bytes()) if logpath.exists() else None
+        rec['log_sha256'] = file_digest(logpath) if logpath.exists() else None
         seal(root, run, rec)
     return {'run': run, **rec}
 
@@ -1143,7 +1152,7 @@ def run_after(root, c, tid, checks, argv, timeout=300):
     finally:
         rec['finished_at'] = None if rec['overall_status'] == 'running' else now()
         logpath = path/'output.log'
-        rec['log_sha256'] = digest(logpath.read_bytes()) if logpath.exists() else None
+        rec['log_sha256'] = file_digest(logpath) if logpath.exists() else None
         save()
     return {'action': action, **rec}
 
@@ -1213,7 +1222,7 @@ def assess_check(root, c, t, cid, directory, rec):
         if input_error: raise HarnessError(input_error)
         require(rec.get('validity') == 'valid' and rec.get('inputs') == current, '相关输入变化，证据已失效')
         stage = 'log'
-        require(digest((directory/'output.log').read_bytes()) == rec.get('log_sha256'), '日志损坏或缺失')
+        require(file_digest(directory/'output.log') == rec.get('log_sha256'), '日志损坏或缺失')
         if c['checks'][cid]['kind'] == 'tests':
             stage = 'counts'
             counts = rec.get('counts') or {}
@@ -1238,6 +1247,35 @@ def assess_check(root, c, t, cid, directory, rec):
         return result, gap
     result.update(conditions_met=True, evidence_status='valid')
     return result, None
+
+
+def action_diagnostics(root, tid):
+    """Read action observations without changing delivery conditions or originals."""
+    result = []
+    base = f'.harness/actions/{tid}'
+    advice = '先核对动作回执、关联RUN、实际进程及副作用；在任务正文记录结局和材料。保留原件，不盲目重试；相同argv不能证明是同一业务操作。'
+    def add(code, message, identity, refs):
+        result.append(diagnostic(code, message, advice, 'action', identity, refs))
+    try:
+        path = safe(root, base)
+        directories = sorted(path.iterdir()) if path.exists() else []
+    except (HarnessError, OSError) as exc:
+        add('action_observation_unavailable', f'无法读取动作观察：{exc}', tid, [base])
+        return result
+    for directory in directories:
+        ref = f'{base}/{directory.name}/summary.json'
+        try:
+            directory = safe(root, f'{base}/{directory.name}')
+            require(directory.is_dir(), '动作观察不是目录')
+            rec = load(safe(root, ref))
+            require(isinstance(rec, dict) and rec.get('task_id') == tid, '动作记录对象不匹配')
+            status = rec.get('overall_status')
+            require(status in ('checking', 'running', 'passed', 'failed', 'blocked', 'error', 'interrupted'), '动作记录状态无效')
+            if status in ('checking', 'running'):
+                add('action_unresolved', f'{directory.name}: 动作仍在进行或中断后结局未知；启动标记不能排除启动窗口。', directory.name, [ref])
+        except (HarnessError, OSError, ValueError, TypeError) as exc:
+            add('invalid_action_observation', f'{directory.name}: 无法判定动作观察：{exc}', directory.name, [ref])
+    return result
 
 
 def assess(root, c, t):
@@ -1357,6 +1395,7 @@ def assess(root, c, t):
                                    'human_status': human_status, 'conditions_met': met, 'diagnostics': human_diagnostics})
     return {'task_id': t['id'], 'time': now(), 'conditions_met': not gaps, 'gaps': gaps, 'runs': selected,
             'global_gaps': global_gaps, 'global_diagnostics': global_diagnostics,
+            'action_diagnostics': action_diagnostics(root, t['id']),
             'check_results': check_results, 'acceptance_results': acceptance_results,
             'record_fingerprint': digest({'task': {k:v for k,v in t.items() if k not in ('state','updated_at','next_action','next_reason')}, 'materials': materials, 'reconciliations': reconciliations}),
             'coverage': 'v2' if t['schema_version'] == 2 else 'legacy',
@@ -1435,6 +1474,10 @@ def readable_assessment(assessment):
     for d in assessment.get('global_diagnostics', []):
         lines.append(f'共同处置 [{d["code"]} / {d["subject"]["kind"]} {d["subject"]["id"]}]：{d["action"]}')
         if d['evidence_refs']: lines.append('  核对材料：' + '、'.join(d['evidence_refs']))
+    for d in assessment.get('action_diagnostics', []):
+        lines.append(f'动作核对提醒 [{d["code"]} / {d["subject"]["id"]}]：{d["message"]}')
+        lines.append('  处置：' + d['action'])
+        lines.append('  核对材料：' + '、'.join(d['evidence_refs']))
     for ac in assessment['acceptance_results']:
         lines.append(f'验收 {ac["id"]}：{ac["text"]}；检查：{", ".join(ac["checks"]) or "仅人工"}；'
                      f'机械条件：{"满足" if ac["conditions_met"] else "有缺口"}；人工：{humans[ac["human_status"]]}')

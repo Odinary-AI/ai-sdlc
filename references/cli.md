@@ -35,6 +35,10 @@ python3 H --root PROJECT run-after TASK-001 --check unit --check source-format -
 
 链条观察保存在`.harness/actions/TASK-ID/ACTION-ID/summary.json`，列调用argv、指定检查的本次RUN、起止时间、是否已启动动作、状态/退出码及原因；动作启动后另有output.log和日志散列。这是执行观察，不是新验收协议或close/Stop通过证据。动作失败返回1，不吞失败；参数/启动前配置错误返回2。普通阻塞返回1，动作成功返回0。中断可能留下checking/running记录，须先核对RUN、动作记录、进程及实际效果，不自动重放，也不通过改写旧记录消除未知；action_started=false但记录running仍不能证明动作未发生（启动与回执写入存在窗口）。动作的超时/进程组清理不撤销已发生的副作用。
 
+1.5.3起，共同assess在`action_diagnostics`中只读列出当前任务的checking/running及无法读取或判定的ACTION，resume/close文本同步展示核对提醒和summary.json路径。提醒不进入global_gaps、不改变conditions_met或检查证据，不阻塞独立工作；历史原件保持，不因新动作成功而消除旧提醒。现场结局与核对材料写入任务正文，当前没有reconcile-action命令或自动重放保护；不能用reconcile-run处置ACTION。提醒持续存在时结合该正文判断，不改写原记录来消除提醒。终态动作不作为通过证据，工具也不验证动作的业务效果。
+
+RUN封存、评估及ACTION封存对完整output.log按块计算SHA-256；散列值、回执格式和日志损坏导致证据失效的语义保持。此改变只限制散列读取缓冲，不限制日志大小、不截断输出，不提供磁盘容量保证。
+
 检查通过不产生提交、发布、删除或任何新权限；调用者须已获授权。该入口可被直接执行动作绕过，不提供安全隔离、防伪、事务或并发编辑保障。最后指纹核对后仍可能有外部写入；高影响对象应沿项目既有固定提交/快照与并发控制，不把本入口提升为不可绕过门禁。不迁移消费项目模式或强制所有任务采用。
 
 ## 扫描覆盖记录
