@@ -21,6 +21,26 @@ Python 3.10+，macOS/Linux，标准库。以下 `H` 表示本 Skill 的 `scripts
 | `python3 H --root PROJECT close TASK-001 --format text` | 用中文展示同一验收、检查和证据判定；仍保存交付回执 |
 | `python3 H --root PROJECT close TASK-001 --complete --review-source docs/review.md` | 引用真实语义审阅，条件满足时完成，否则阻塞并列缺口 |
 
+## 可选项目检查关口
+
+项目按能力、变化与风险复用已有检查；配置`gates`映射task、commit、delivery到现有checks ID，不建立第二套检查定义。各数组非空、不重复且ID已配置；未采用时省略gates，不影响原模式和协议。文档模式、已有CI或原生提交/交付控制可提供等效保护，不强制安装本包脚本或Git/Codex hook。接入/升级/阶段回顾和漏检时主动评估并建议合适入口，不能把“可选”当作不核对；决定、等效依据及剩余风险归原任务，不增加审批台账。
+
+```json
+{"gates": {"task": ["project-integrity"], "commit": ["project-integrity"], "delivery": ["project-integrity", "package"]}}
+```
+
+示例ID须换成项目现有检查。task为该项目已决定的共同义务：新任务begin补入正常验收映射；resume/close/Stop的共同assess核对是否遗漏，更新配置后已有任务可出现需要映射和取证的缺口，历史原件不重写。检查仍通过verify形成RUN；语义审阅和完整范围由现有流程负责，不能由gates字段推断要求完整。doctor给出已映射状态、等效保护建议和实际接入边界，不自动启用hook。
+
+```sh
+python3 H --root PROJECT gate --stage task --source worktree
+python3 H --root PROJECT gate --stage commit --source index
+python3 H --root PROJECT gate --stage delivery --source commit --ref FIXED_COMMIT
+```
+
+commit/delivery另需Git，分别检查真实暂存树和解析后的固定提交，读取所选对象中的配置并按已声明inputs与职责来源隔离导出，不混入工作树修复；task只用工作树，不要求Git。关口未配置、错误source/ref、未知ID、遗漏输入、检查失败/超时/未知、坏报告及相关内容变化均不放行。选定输入集及权限参与身份核对，无关变化不误拦；不会自动发现未映射依赖。检查显式传入的项目内绝对脚本/文件参数改指向导出源，未映射参数拒绝；外部解释器/服务或命令内部隐含路径仍须项目语义核对，导出不是沙箱。Git仓库上下文变量从子进程移除，避免命令读回原索引；完整输出沿stderr，stdout为JSON结果（身份、输入散列、实际argv/计数/退出及结果）。该结果是运行观察，不是任务RUN/完成或发布授权；需要工程验收时沿现有verify保留真实输出。未知在途进程保留临时目录并报告，先核对现场再重试；不提供跨进程事务或不可绕过控制。
+
+Git hook只调用同一gate入口。启用前检查已有hooksPath并合并，不覆盖现有检查；检查暂存对象，普通进度提交不要求任务completed。提交、合并与API发布路径分别核对接入，不能用pre-push覆盖不经git push的API调用。安装/发布入口在产生副作用前调用固定提交gate，检查通过仍须已有动作授权；stage定义、检查充分性、平台信任及实际事件不由脚本代替。正式阶段治理仍用maintenance完整清单，普通提交不默认全量治理。
+
 ## 可选条件衔接
 
 `run-after`是1.4.0起的可选组合入口，不是任务完成判定或统一交付门。`--check ID`可重复，必须非空、不重复且属于当前进行中v2任务的验收范围；未知ID、缺输入或坏配置明确失败，不回退到全部检查或空范围。可选择本次依赖所需的子集，任务close仍核对全部必需验收。检查命令、inputs、rule_sections、optional_tests及判据沿现有配置，不增加统一套件。检查充分性、例外理由和授权真实性由AI/人核对，不能失败后换范围来放行同一义务。

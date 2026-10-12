@@ -19,7 +19,7 @@ import fcntl
 import importlib.util
 from urllib.parse import unquote, urlsplit
 
-VERSION = '1.7.0-dev.1'
+VERSION = '1.8.0-dev.0'
 TASK_STATE_LABELS = {'not_started': '未开始', 'in_progress': '进行中', 'blocked': '阻塞',
                      'interrupted': '已中断', 'completed': '已完成', 'cancelled': '已取消'}
 PACKAGE = Path(__file__).resolve().parents[1]
@@ -150,6 +150,12 @@ def validate_config(root, c, check_ids=None):
         require(existing or str(status).casefold() != str(policy).casefold(),
                 f'status 与 {role} 的未建立路径仅大小写不同，无法确认独立；先建立并核对实际文件后再映射')
     require(isinstance(c.get('checks'), dict), 'checks 必须为对象')
+    gates = c.get('gates', {})
+    require(isinstance(gates, dict) and set(gates) <= {'task', 'commit', 'delivery'}, 'gates 仅支持task/commit/delivery映射')
+    for stage, ids in gates.items():
+        require(isinstance(ids, list) and ids and all(isinstance(x, str) for x in ids)
+                and len(set(ids)) == len(ids) and all(x in c['checks'] for x in ids),
+                f'gates.{stage}须为非空、不重复的已配置检查ID数组')
     for cid in c['checks'] if check_ids is None else sorted(check_ids):
         require(cid in c['checks'], f'验收标准引用未知检查: {cid}')
         check = c['checks'][cid]
@@ -380,6 +386,10 @@ def doctor(root, c, check_ids=None):
             if target != entry.resolve() and target not in linked:
                 gaps.append(f'项目入口未链接 {role}: {c["authorities"][role]}')
     return {'mechanism_version': VERSION, 'files': files, 'gaps': gaps,
+            'execution_gates': {'configured': c.get('gates', {}),
+                'recommendation': ('已映射共同检查；核对各关口的实际接入、生效和反例，不由配置推断保护到位。' if c.get('gates') else
+                                   '未配置本包关口；先核对项目已有CI、提交及交付入口的等效保护，缺少时建议配置受影响检查，不默认启用所有平台或全量治理。'),
+                'boundary': '配置存在不证明Git/Codex事件启用、信任或实际触发；须在接入与漏检复查时验证。'},
             'ready': not gaps, 'readiness_kind': 'files_configuration_and_navigation',
             'boundary': 'ready 仅表示文件、配置及导航检查就绪，不等于接入任务完成。规则语义及授权来源由开发 AI 核对。独立平台适配的启用、信任及实际触发需另行验证。'}
 
@@ -403,6 +413,8 @@ def adopt(root, mapping_path=None, apply=False):
         require(not candidates, '发现验证规则候选，先明确 validation 映射: ' + ', '.join(candidates))
     c = {'schema_version': 1, 'mechanism_version': VERSION, 'authorities': authorities,
          'confirmation_source': mapping.get('confirmation_source', ''), 'checks': mapping.get('checks', {})}
+    if 'gates' in mapping:
+        c['gates'] = mapping['gates']
     # Validate against the actual project so existing symlink aliases are visible.
     validate_config(root, c)
     actions = []
@@ -838,6 +850,15 @@ def begin(root, c, spec):
     require(spec.get('schema_version', 2) == 2, '新建任务使用 schema_version=2；旧任务显式迁移')
     t.update(schema_version=2, state='in_progress', created_at=now(), human_acceptance={})
     v2_defaults(t)
+    common = set(c.get('gates', {}).get('task', []))
+    if common:
+        common -= task_check_ids(t)
+    if common:
+        identity = 'PROJECT-GATES'
+        while identity in {x.get('id') for x in t['acceptance']}:
+            identity += '-1'
+        t['acceptance'] = [*t['acceptance'], {'id': identity, 'text': '项目已配置的共同任务检查通过且证据有效',
+                                            'checks': sorted(common), 'human_required': False}]
     validate_task(t, c)
     errors = task_structure_errors(t)
     require(not errors, '任务结构无效: ' + '；'.join(errors))
@@ -1087,6 +1108,132 @@ def verify(root, c, tid, cid):
         seal(root, run, rec)
     return {'run': run, **rec}
 
+def gate_inputs(root, c, ids):
+    """Same declared inputs, without creating a synthetic task or acceptance state."""
+    paths = {'.harness/project.json', *c['authorities'].values()}
+    for cid in ids:
+        paths.update(c['checks'][cid]['inputs'])
+    files = {}
+    for rel in sorted(paths):
+        p = safe(root, rel)
+        require(p.exists(), '检查入口输入缺失: ' + rel)
+        members = input_files(root, p) if p.is_dir() else [p]
+        if p.is_dir():
+            files[rel + '/'] = [str(x.relative_to(root)) for x in members]
+        for member in members:
+            files[str(member.relative_to(root))] = {'sha256': file_digest(member),
+                                                   'mode': member.stat().st_mode & 0o111}
+    return paths, files
+
+def gate(root, stage, source='worktree', ref=None):
+    """Run configured checks on the actual worktree/index/commit, not on old RUNs."""
+    require(stage in ('task', 'commit', 'delivery'), '未知检查关口')
+    require((stage == 'task' and source == 'worktree' and ref is None)
+            or (stage == 'commit' and source == 'index' and ref is None)
+            or (stage == 'delivery' and source == 'commit' and isinstance(ref, str) and ref),
+            'task使用worktree；commit使用index；delivery使用commit并明确--ref')
+    require(os.environ.get('AI_SDLC_GATE_ROOT') != str(root), '同一项目检查不能递归调用gate')
+    spec = importlib.util.spec_from_file_location('gate_snapshot', PACKAGE/'scripts/evidence_snapshot.py')
+    snapshot_tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(snapshot_tool)
+    identity, selected = None, None
+    if source == 'worktree':
+        c = load(safe(root, '.harness/project.json'))
+    else:
+        initial = snapshot_tool.snapshot(root, source, ['.harness/project.json'], ref)
+        identity = initial['identity']
+        c = json.loads(snapshot_tool.git(root, 'show', identity + ':.harness/project.json'))
+    require(isinstance(c, dict), '项目配置必须为对象')
+    require(isinstance(c.get('gates', {}), dict), 'gates须为对象')
+    ids = c.get('gates', {}).get(stage, [])
+    require(isinstance(ids, list) and ids, f'未配置gates.{stage}；先核对项目等效保护并配置所需检查')
+    temporary = Path(tempfile.mkdtemp(prefix='ai-sdlc-gate-')).resolve()
+    preserve = False
+    result = {'stage': stage, 'source': source, 'identity': identity, 'checks': [], 'conditions_met': False,
+              'runner_sha256': digest(Path(__file__).read_bytes()),
+              'snapshot_runner_sha256': digest((PACKAGE/'scripts/evidence_snapshot.py').read_bytes()),
+              'boundary': '仅执行所配置检查；不代替任务验收、语义审阅、授权或平台信任，不是安全隔离。'}
+    try:
+        check_root = root
+        if source != 'worktree':
+            require(isinstance(c.get('authorities'), dict) and isinstance(c.get('checks'), dict), '缺少项目映射')
+            paths = {'.harness/project.json', *c['authorities'].values()}
+            for cid in ids:
+                require(cid in c['checks'], '关口引用未知检查: ' + str(cid))
+                paths.update(c['checks'][cid]['inputs'])
+            selected = snapshot_tool.snapshot(root, source, list(paths), identity if source == 'commit' else None)
+            require(selected['identity'] == identity, '选择输入期间暂存对象变化，核对后重试')
+            check_root = snapshot_tool.export_snapshot(root, selected, temporary/'source')
+        validate_config(check_root, c, set(ids))
+        _, before = gate_inputs(check_root, c, ids)
+        result['inputs_sha256'] = digest(before)
+        for number, cid in enumerate(ids):
+            chk = c['checks'][cid]
+            argv = []
+            for position, argument in enumerate(chk['argv']):
+                prefix, separator, value = argument.partition('=') if argument.startswith('-') else ('', '', argument)
+                path = Path(value)
+                if source != 'worktree' and path.is_absolute():
+                    resolved = path.resolve()
+                    relative = (path.relative_to(root) if path.is_relative_to(root) else
+                                resolved.relative_to(root) if resolved.is_relative_to(root) else None)
+                    if relative is not None:
+                        # Only an external Python runtime may stay outside the snapshot.
+                        external_python = (position == 0 and not resolved.is_relative_to(root)
+                                           and re.fullmatch(r'python(?:[0-9]+(?:\.[0-9]+)*)?', path.name))
+                        if not external_python:
+                            replacement = check_root / relative
+                            require(replacement.exists(), '绝对项目参数未纳入检查输入: ' + value)
+                            value = str(replacement)
+                argv.append(prefix + separator + value)
+            log, report = temporary/f'{number}.log', temporary/f'{number}.json'
+            env = dict(os.environ)
+            # Git hooks export repository variables; don't redirect snapshot checks to the original index.
+            for name in ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR',
+                         'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_PREFIX'):
+                env.pop(name, None)
+            env.update(AI_PROJECT_HARNESS_REPORT=str(report), AI_PROJECT_HARNESS_OPTIONAL_TESTS=json.dumps(chk.get('optional_tests', [])),
+                       AI_SDLC_GATE_ROOT=str(check_root), AI_SDLC_PROJECT_ROOT=str(root), AI_SDLC_INPUT_SOURCE=source,
+                       PYTHONDONTWRITEBYTECODE='1')
+            rec = {'check_id': cid, 'argv': argv, 'overall_status': 'running', 'exit_code': None, 'counts': None, 'reason': ''}
+            execute_process(check_root, argv, env, chk.get('timeout', 300), log, rec, lambda _: None)
+            if chk['kind'] == 'tests' and rec['overall_status'] in ('passed', 'failed'):
+                try:
+                    counts = load(report)
+                    rec['counts'] = counts
+                    test_counts_pass(counts, chk)
+                except HarnessError as exc:
+                    rec['overall_status'], rec['reason'] = 'failed', str(exc)
+            rec['log_sha256'] = file_digest(log)
+            with log.open('rb') as stream:
+                stream.seek(0, 2)
+                stream.seek(max(0, stream.tell() - 8000))
+                rec['output_tail'] = stream.read().decode('utf-8', errors='replace')
+            # Keep the complete command output in the caller's stderr/CI/RUN log; JSON stays on stdout.
+            with log.open('rb') as stream:
+                for chunk in iter(lambda: stream.read(65536), b''):
+                    if hasattr(sys.stderr, 'buffer'):
+                        sys.stderr.buffer.write(chunk)
+                    else:
+                        sys.stderr.write(chunk.decode('utf-8', errors='replace'))
+            preserve |= rec['overall_status'] == 'running'
+            result['checks'].append(rec)
+            if rec['overall_status'] != 'passed':
+                return result
+        require(gate_inputs(check_root, c, ids)[1] == before, '检查执行期间相关输入变化，不能放行')
+        if source != 'worktree':
+            current = snapshot_tool.snapshot(root, source, selected['paths'], identity if source == 'commit' else None)
+            require(current['files_sha256'] == selected['files_sha256'], '检查执行期间暂存相关输入变化，不能放行')
+            result['current_identity'] = current['identity']
+        result['conditions_met'] = True
+        return result
+    finally:
+        if preserve:
+            result['retained_directory'] = str(temporary)
+        else:
+            import shutil
+            shutil.rmtree(temporary)
+
 def run_after(root, c, tid, checks, argv, timeout=300):
     """Optional fresh-check chain. Authorization and sufficient scope remain caller duties."""
     require(isinstance(checks, list) and checks and len(set(checks)) == len(checks),
@@ -1286,6 +1433,11 @@ def assess(root, c, t):
         gaps.append(message)
         global_diagnostics.append(diagnostic(code, message, action, kind, identity or t['id'],
                                              [task_ref] if refs is None else refs))
+    missing_common = set(c.get('gates', {}).get('task', [])) - task_check_ids(t)
+    if missing_common:
+        add_gap('遗漏项目共同检查: ' + ', '.join(sorted(missing_common)), 'project_gate_missing',
+                '按现行项目gates.task补齐任务检查映射并执行；不能删掉项目义务来放行。',
+                refs=['.harness/project.json', task_ref])
     for gap in doctor(root, c, task_check_ids(t))['gaps']:
         add_gap(gap, 'project_prerequisite', '核对项目映射、实际文件与现行授权，补齐该共同前置后重新评估。',
                 'project', '.harness/project.json', ['.harness/project.json'])
@@ -1529,6 +1681,10 @@ def main(argv=None):
     p.add_argument('task'); p.add_argument('--check', action='append', required=True)
     p.add_argument('--timeout', type=float, default=300, help='依赖动作超时秒数')
     p.add_argument('--action', dest='argv', nargs=argparse.REMAINDER, required=True, help='最后传入动作 argv，无隐式 shell')
+    p = sub.add_parser('gate', help='复用项目检查，核对实际任务工作树/暂存对象/固定交付提交')
+    p.add_argument('--stage', choices=['task', 'commit', 'delivery'], required=True)
+    p.add_argument('--source', choices=['worktree', 'index', 'commit'], required=True)
+    p.add_argument('--ref')
     p = sub.add_parser('close', help='重新核对交付条件；可据实标记完成'); p.add_argument('task'); p.add_argument('--complete', action='store_true'); p.add_argument('--review-source', help='项目内已有的非空审阅文件路径，可引用任务正文；不是会话原话')
     p.add_argument('--format', choices=['json','text'], default='json', help='文本验收视图或完整 JSON；不改变判定与命令副作用')
     p = sub.add_parser('pause', help='保存中断状态及下一动作'); p.add_argument('task'); p.add_argument('--next', required=True)
@@ -1546,6 +1702,8 @@ def main(argv=None):
         require(root.is_dir(), '目标项目目录不存在')
         if a.command == 'adopt':
             result = adopt(root, a.mapping, a.apply)
+        elif a.command == 'gate':
+            result = gate(root, a.stage, a.source, a.ref)
         else:
             spec = load(Path(a.spec)) if a.command == 'begin' else None
             selection = None if a.command == 'doctor' else task_check_ids(spec if spec is not None else read_task(root, a.task)[0])
@@ -1578,13 +1736,14 @@ def main(argv=None):
             print(json.dumps(result, ensure_ascii=False, indent=2))
         if a.command == 'verify': return 0 if result['verification_status'] == 'verified' else 1
         if a.command == 'run-after': return 0 if result['overall_status'] == 'passed' else 1
+        if a.command == 'gate': return 0 if result['conditions_met'] else 1
         if a.command == 'close': return 0 if result['conditions_met'] else 1
         if a.command == 'doctor': return 0 if result['ready'] else 1
         return 0
     except TaskCommittedError as exc:
         print(json.dumps(exc.result, ensure_ascii=False), file=sys.stderr)
         return 2
-    except (HarnessError, KeyError, TypeError, ValueError, OSError) as exc:
+    except (HarnessError, KeyError, TypeError, ValueError, OSError, subprocess.CalledProcessError) as exc:
         print(json.dumps({'error': str(exc), 'status': 'error'}, ensure_ascii=False), file=sys.stderr)
         return 2
 

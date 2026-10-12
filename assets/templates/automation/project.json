@@ -7,5 +7,6 @@
     "status": "docs/status.md"
   },
   "confirmation_source": "",
-  "checks": {}
+  "checks": {},
+  "gates": {}
 }

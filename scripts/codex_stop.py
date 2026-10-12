@@ -99,7 +99,7 @@ def handle(root, event):
 
 
 def proposed_config(root):
-    command = shlex.join([sys.executable, str(Path(__file__).resolve()), '--root', str(root), 'event'])
+    command = shlex.join([sys.executable, '-B', str(Path(__file__).resolve()), '--root', str(root), 'event'])
     return {'description':'AI工程机制 Stop 适配；需平台审阅信任。',
             'hooks':{'Stop':[{'hooks':[{'type':'command','command':command,'timeout':10}]}]}}
 
