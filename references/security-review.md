@@ -17,7 +17,7 @@
 
 ## 执行与维护
 
-SC-02的生态识别先交叉核对锁文件、实际安装脚本及运行时入口。例如在相关目录用`rg --files -g '*lock*' -g '*requirements*' -g 'pyproject.toml' -g 'package.json'`定位声明，再用`rg -n 'pip|python|npm|pnpm|spawn|exec' scripts package.json`追查安装及子进程入口（路径按项目实际替换）。npm锁文件之外，文档处理安装脚本可能建立私有Python环境；开发Node与Electron内置Node也需分开。搜索只是线索，须沿具名入口确认所加载的生态，不建设统一扫描器或每次全仓检索。
+SC-02的生态识别先交叉核对锁文件、实际安装脚本及运行时入口。例如在相关目录用`rg --files -g '*lock*' -g '*requirements*' -g 'pyproject.toml' -g 'package.json'`定位声明，再用`rg -n 'pip|python|npm|pnpm|spawn|exec' scripts package.json`追查安装及子进程入口（路径按项目实际替换）。npm锁文件之外，文档处理安装脚本可能建立私有Python环境；开发Node与Electron内置Node也需分开。同一生态也可能有多个独立依赖根：例如项目根pnpm树之外，文档worker从私有payload中的另一棵npm树加载包。沿该worker的解析路径核对私有清单、锁文件及实际加载版本；根pnpm audit零公告仅覆盖其所查依赖树，不能代表私有npm树。单一依赖根无需重复扫描。搜索只是线索，须沿具名入口确认所加载的生态，不建设统一扫描器或每次全仓检索。
 
 已核对可信依赖后，可在实际文档处理进程使用的Python环境执行下面的只读探针；`pypdf`仅为示例包，换成项目实际模块。将输出与本次锁文件/安装来源对应；分发元数据、模块版本和加载路径不一致时保留差异，不能只凭刚修改的requirements宣称升级已生效。
 

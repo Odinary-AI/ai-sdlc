@@ -296,7 +296,7 @@ task["human_acceptance"]["AC-01"] = {
 
 ## 可选Git输入快照
 
-`scripts/evidence_snapshot.py`是独立、可选的只读输入清单工具，两种模式均可使用，不改变harness任务、RUN或验收协议。需要Git；不执行检查、不自动加入close，不要求文档模式建立脚本映射。
+`scripts/evidence_snapshot.py`是独立、可选的只读输入清单工具，两种项目模式均可使用，不改变harness任务、RUN或验收协议。需要Git；不执行检查、不自动加入close，不要求文档模式建立脚本映射。
 
 ```sh
 python3 /实际位置/ai-sdlc/scripts/evidence_snapshot.py --root /项目根目录 --source worktree --path src --path tests --output /已存在目录/worktree-new.json
@@ -304,9 +304,19 @@ python3 /实际位置/ai-sdlc/scripts/evidence_snapshot.py --root /项目根目�
 python3 /实际位置/ai-sdlc/scripts/evidence_snapshot.py --root /项目根目录 --source commit --ref HEAD --path src --path tests --output /已存在目录/commit-new.json
 ```
 
-`--path`必填、可重复，按仓库相对文件/目录字面前缀选择（不是glob），归一化并去重；不允许根目录、绝对或上级路径。工作树选已跟踪及未忽略的未跟踪文件，已跟踪但删除的文件标missing；不会发现被忽略的新文件。index从当前暂存树读取、commit从解析后的固定提交读取，均不混入工作树内容；index调用Git write-tree可能写Git对象库，不修改暂存内容或分支。未合并索引、非普通文件（含符号链接及子模块）、无文件匹配或读取失败返回2，不生成成功快照。部分选择无匹配会列入unmatched_paths，使用者须核对缺口，不将剩余范围当完整通过。
+`--path`必填、可重复，按仓库相对文件/目录字面前缀选择（不是glob），归一化并去重；不允许根目录、绝对或上级路径。工作树选已跟踪及未忽略的未跟踪文件，已跟踪但删除的文件标missing；不会发现被忽略的新文件。index从当前暂存树读取、commit从解析后的固定提交读取，均不混入工作树内容；index复制当前索引到临时目录后调用Git write-tree，可能写Git对象库，不改原索引字节、工作区内容或分支。未合并索引、非普通文件（含符号链接及子模块）、无文件匹配或读取失败返回2，不生成成功快照。部分选择无匹配会列入unmatched_paths，使用者须核对缺口，不将剩余范围当完整通过。
 
 输出记录source、固定对象identity（工作树为null）、去重paths、files的SHA-256/执行权限或missing、files_sha256及采集起止时间。files_sha256只用于比较文件集合、内容与权限，不包含选择范围、对象来源或未匹配项；比较时同时核对这些字段。输出父目录须已存在，输出必须在选择范围外且不存在；排他创建拒绝覆盖旧文件。工具不读取文件正文到报告，但路径和散列仍应按项目隐私范围保留，不自动上传。
+
+可选 `--export-dir /规范绝对路径/全新目录` 仅适用于index/commit：从清单已固定的identity导出所选普通文件，保持仓库相对目录及执行权限，每份内容再次核对SHA-256，报告增加export_directory。不导出整个仓库，不执行对象中的代码，不自动调用生成器或检查；选择所需源、明确来源及其他依赖由使用者负责。导出后可在该目录运行已审阅的现有生成器，检查必须实际读取导出根；工具不证明依赖已选全或代码可信。
+
+导出目录必须位于原仓库外、父目录已存在、目标不存在；使用父目录解析后的规范路径（macOS的/tmp、/var别名也须先解析）。拒绝目标及父级符号链接、上级路径、旧/空目录、报告位于导出目录内、任一选择无匹配、符号链接/子模块等非普通Git对象及.git路径。排他mkdir后写入；普通写入/校验异常清理本次新建目录，保留原目录和索引；强杀可能留部分目录，先核对现场再选新目标，不将目录存在当成功。报告写入失败可能留下完整导出目录，退出2仍不能算成功。并发修改目标父级或导出目录不在保障范围，使用独立临时父目录并暂停相关写入。index移动后应重取快照；已导出的内容继续对应原identity，不跟随移动。
+
+```sh
+python3 /可信安装位置/ai-sdlc/scripts/evidence_snapshot.py --root /项目根目录 --source index --path docs/project-guide.md --path src --output /规范路径/已有父目录/index.json --export-dir /规范路径/已有父目录/selected-tree
+# 按实际依赖选择范围；从可信安装位置执行生成器，明确传入selected-tree为root。
+python3 /可信安装位置/ai-sdlc/scripts/project_guide.py build --root /规范路径/已有父目录/selected-tree --source docs/project-guide.md --output docs/project-guide.html
+```
 
 此清单不冻结工作树、不能证明扫描语义或环境相同；捕获期间并发变化可能得到混合状态。暂停相关写入、采证前后重取新快照并按风险核对，不能用两次相同证明中间未变化。检查应实际读取所声明的对象；要检查暂存/提交内容，可在隔离导出目录执行现有检查。不要只检查工作树的git diff后宣称暂存区已验收。历史快照保持原样，工具不替代现行RUN失效检查。
 
