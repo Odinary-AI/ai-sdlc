@@ -2,7 +2,7 @@
 name: ai-sdlc
 description: Explicitly invoked project engineering mechanism for individual developers and one-person companies. Adopt a project, execute or resume an authorized task, inspect and clean project files, carry out integrated project governance, and check evidence-backed delivery. Invoke only when the user explicitly requests this skill; ordinary discussion does not authorize adoption.
 metadata:
-  version: "1.7.0-dev.0"
+  version: "1.7.0-dev.1"
 ---
 
 # AI工程机制
@@ -17,7 +17,7 @@ metadata:
 - **目录检查与清理**：用户要求检查目录、多余文件或清理项目时，读取[目录检查与清理入口](references/project-layout.md#目录检查与清理入口)，主动调查内容与归属，判断归类/删除/保留/待核实，按授权处置、同步有效消费者并核对完成范围；只读请求不执行移动或删除，不默认升级为完整治理。
 - **执行或恢复任务**：从[项目接手与任务恢复](references/lifecycle.md#项目接手与任务恢复)进入，按其中路由沿项目的文档或脚本模式继续；新需求、范围变化或理解不足时按[需求与验收澄清](references/lifecycle.md#需求与验收澄清)整理用户结果与验收草案；在关键实现前核对反馈是否够用，反馈不足、原因不明或反复修复时按其中的[反馈与诊断](references/lifecycle.md#反馈与诊断)推进。
 - **检查交付或维护机制**：读取 [验证与能力边界](references/verification.md)，核对相关证据、语义审阅与待人事项。
-- **项目综合治理**：用户要求“治理项目”等整合工作时，读取 [综合治理入口](references/maintenance.md#项目综合治理入口)，先基于现状形成统一方案，再沿授权完成检查、修复、治理体系回顾与按需更新、复验和交付；全面治理在收尾时按该流程必须建立或刷新 HTML 项目导览，保留已有 Markdown 导览为唯一内容源并生成 HTML，正文只改源后重新生成，HTML基本格式及使用/内部结构两图按该流程核对。
+- **项目综合治理**：用户要求“治理项目”等整合工作时，读取 [综合治理入口](references/maintenance.md#项目综合治理入口)，先基于现状形成统一方案，再沿授权完成检查、修复、治理体系回顾与按需更新、复验和交付；全面治理收尾必须交付按[项目导览页](references/maintenance.md#项目导览页)生成并验证的 HTML；仅检查、仅方案保持只读。
 - **项目图文与工程导览**：用户单独请求了解、生成或刷新项目导览时，读取[导览流程](references/maintenance.md#项目导览页)，整理产品与工程视角、已确认计划/进展/问题及下一步，沿真实来源交付同源HTML；可选用[随包工具](references/cli.md#可选工程导览工具)，不要求消费项目更换现有文档站或执行模式。
 - **阶段回顾与治理更新**：用户要求“治理体系更新”“治理规则更新”“阶段复盘”或“经验沉淀”时，读取 [回顾与更新入口](references/maintenance.md#阶段回顾与治理更新入口)，按范围回顾过程、提炼经验并依授权维护项目文件。
 - **阶段或专项健康检查**：先读 [维护与检查底线](references/maintenance.md)，按范围选择五类基础专项及适用的实验、UX、安全条件专项；系统完整性主题沿设计专项DS-07映射，按[项目裁剪](references/maintenance.md#项目裁剪与检查力度)分别选择覆盖、实现深度及验证强度。适用必需项不可静默省略，模型自行选择方法并在底线上增加检查。治理体系内部及其与项目实际的核对按[治理扫描范围](references/maintenance.md#治理体系与项目实际)纳入现有条目。
@@ -45,7 +45,7 @@ metadata:
 
 ## 条件流程
 
-出现实验、恢复、外部副作用、事故，或涉及旧消费者、新旧共存、部分切换及兼容退出的复杂迁移时读 [风险流程](references/risk-workflows.md)；任务收尾、漏检误拦和阶段复查读 [维护](references/maintenance.md)；需要复用经验或发现值得保留的方法时按其中的[经验保留与复用](references/maintenance.md#经验保留与复用)处理。Codex 项目选择事件接入时读 [Codex hooks](references/codex-hooks.md)，核对配置、信任及实测状态；核心不依赖该适配，其他平台未验证。普通任务不加载无关指南。
+出现实验、恢复、外部副作用、事故，或涉及旧消费者、新旧共存、部分切换及兼容退出的复杂迁移时读 [风险流程](references/risk-workflows.md)；普通收尾沿[共同任务流程](references/lifecycle.md#共同任务流程)和[执行证据与交付](references/verification.md#执行证据与交付)；漏检误拦按[主动复查](references/maintenance.md#主动复查)，阶段检查按[触发与选择](references/maintenance.md#触发与选择)执行；值得保留或复用的方法按[经验保留与复用](references/maintenance.md#经验保留与复用)处理。Codex 项目选择事件接入时读 [Codex hooks](references/codex-hooks.md)，核对配置、信任及实测状态；核心不依赖该适配，其他平台未验证。普通任务不加载无关指南。
 
 ## 项目概览参考示例
 
