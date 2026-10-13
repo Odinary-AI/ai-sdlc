@@ -19,7 +19,7 @@ import fcntl
 import importlib.util
 from urllib.parse import unquote, urlsplit
 
-VERSION = '1.9.0-dev.0'
+VERSION = '1.9.1-dev.0'
 TASK_STATE_LABELS = {'not_started': '未开始', 'in_progress': '进行中', 'blocked': '阻塞',
                      'interrupted': '已中断', 'completed': '已完成', 'cancelled': '已取消'}
 PACKAGE = Path(__file__).resolve().parents[1]
@@ -354,8 +354,18 @@ def doctor(root, c, check_ids=None):
         gaps.append('尚未配置项目验证命令')
     for cid in c['checks'] if check_ids is None else sorted(check_ids):
         for rel in c['checks'][cid]['inputs']:
-            if not safe(root, rel).exists():
+            source = safe(root, rel)
+            if not source.exists():
                 gaps.append(f'{cid}: 输入缺失: {rel}')
+                continue
+            status = safe(root, c['authorities']['status'])
+            try:
+                members = input_files(root, source) if source.is_dir() else [source]
+                if any(member.resolve() == status.resolve() or
+                       (status.exists() and member.samefile(status)) for member in members):
+                    gaps.append(f'{cid}: 检查输入 {rel} 包含状态文件 {c["authorities"]["status"]}；状态写回会使证据失效，请分离状态或调整输入来源，不自动排除该输入')
+            except (HarnessError, OSError, RuntimeError) as exc:
+                gaps.append(f'{cid}: 输入关系无法核对: {rel}: {exc}')
         for role, titles in c['checks'][cid].get('rule_sections', {}).items():
             try:
                 rule_sections(safe(root, c['authorities'][role]), titles)
