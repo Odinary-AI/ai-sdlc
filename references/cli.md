@@ -354,6 +354,8 @@ python3 /实际Skill位置/scripts/project_guide.py inspect --root /项目目录
 
 内容源首先写guide-meta JSON注释，再写唯一#主标题及##板块，板块可加{#id}。普通段落、Markdown链接、三级标题、列表和代码围栏可用；不是完整Markdown方言。html围栏只接受受控展示标签/属性，不接受script、iframe、事件属性或javascript链接。旧受控SVG图可保留，新工具图用engineering-map围栏。正文/图要使用的相关文件应在meta.sources或节点sources明确映射，遗漏依赖程序无法自动发现；普通进一步阅读链接不自动成为内容输入。
 
+采用本工具时，date、version、identity、scope只在guide-meta维护，工具据此生成页首；正文需要相同信息时从该源派生，不另手写一套快照字段。check核对同源生成及明确输入身份，不校验人工正文中重复字段的语义一致性。
+
 ```json
 {
   "title": "项目工程导览",
