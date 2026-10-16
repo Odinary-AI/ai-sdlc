@@ -23,7 +23,7 @@ Python 3.10+，macOS/Linux，标准库。以下 `H` 表示本 Skill 的 `scripts
 
 ## 可选项目检查关口
 
-项目按能力、变化与风险复用已有检查；配置`gates`映射task、commit、delivery到现有checks ID，不建立第二套检查定义。各数组非空、不重复且ID已配置；未采用时省略gates，不影响原模式和协议。文档模式、已有CI或原生提交/交付控制可提供等效保护，不强制安装本包脚本或Git/Codex hook。接入/升级/阶段回顾和漏检时主动评估并建议合适入口，不能把“可选”当作不核对；决定、等效依据及剩余风险归原任务，不增加审批台账。
+采用时机、等效保护及接入验证按[项目接入](adoption.md)判断；本节维护脚本配置和执行契约。`gates`将task、commit、delivery映射到现有checks ID，不建立第二套检查定义。各数组非空、不重复且ID已配置；未采用时省略gates，不影响原模式和协议。
 
 ```json
 {"gates": {"task": ["project-integrity"], "commit": ["project-integrity"], "delivery": ["project-integrity", "package"]}}
