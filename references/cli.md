@@ -204,6 +204,8 @@ doctor 的 ready 仅表示文件、配置和 README 导航检查就绪；接入�
 
 ## 诊断与验收视图
 
+2.0.0共享解析调整保持原CLI、任务v2及RUN v2格式。harness原Markdown函数入口及HarnessError语义保持；closeout直接调用markdown_support。runner内容身份覆盖harness.py和markdown_support.py，任一变化均使相关证据失效；旧单文件runner可读，但升级后须按实际范围重验，不重写历史RUN。独立复制须包含完整Skill包及新模块，不支持只复制harness.py。版本2.0.0为用户指定的兼容升级。
+
 `resume` 的 assessment 和 `close` 结果保留原有 conditions_met、gaps、runs 等字段，额外提供以下派生信息；不新增任务必填字段：
 
 - `check_results`：按检查 ID 索引，含 run_id、execution_status、evidence_status、conditions_met、log 与 diagnostics。execution_status读取最近RUN的overall_status，无RUN时为not_run；evidence_status是当前证据对检查通过的支持状态，取值见下表。log 是项目内日志路径，失败细节结合该 RUN 的 summary.json 与原始日志读取。

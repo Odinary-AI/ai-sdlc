@@ -10,6 +10,7 @@ import sys
 # Do not leave caches in a consumer project or an installed package.
 sys.dont_write_bytecode = True
 import harness as h
+import markdown_support as md
 
 
 def verdict(status, **details):
@@ -19,7 +20,7 @@ def verdict(status, **details):
 def identity(status_path, text, task_path, prefixes):
     if task_path is None or not prefixes or any(not p.strip() for p in prefixes):
         return verdict('unknown', reason='缺少明确任务来源或当前入口前缀；不按任务编号猜测。')
-    cleaned = h.markdown_structure(text, preserve_inline=True)
+    cleaned = md.markdown_structure(text, preserve_inline=True)
     # Reuse the common parser for both inline and single-line reference definitions.
     definitions = '\n'.join(line for line in cleaned.splitlines()
                             if re.match(r'^ {0,3}\[[^\]]+\]:', line))
@@ -31,8 +32,8 @@ def identity(status_path, text, task_path, prefixes):
             missing.append(prefix)
         for number, line in matches:
             targets = []
-            for target, image in h.markdown_targets(line + '\n\n' + definitions):
-                local = h.local_markdown_target(status_path, target)
+            for target, image in md.markdown_targets(line + '\n\n' + definitions):
+                local = md.local_markdown_target(status_path, target)
                 if not image and local is not None:
                     targets.append(local.resolve())
             if len(targets) != 1:
@@ -51,14 +52,14 @@ def checklist(task_path, sections, claim):
     opened, checked, unknown = [], [], []
     for section in dict.fromkeys(sections):
         try:
-            body = h.rule_sections(task_path, [section]).decode('utf-8')
-        except h.HarnessError as exc:
+            body = md.rule_sections(task_path, [section]).decode('utf-8')
+        except md.MarkdownError as exc:
             unknown.append(str(exc))
             continue
         if re.search(r'^(?: {4,}|\t)[ \t]*(?:[-+*]|\d+[.)])\s+\[', body, re.M):
             unknown.append(f'{section}: 缩进复选项可能是嵌套义务或代码示例，须人工核对')
         found = False
-        for line in h.markdown_structure(body, preserve_inline=True).splitlines():
+        for line in md.markdown_structure(body, preserve_inline=True).splitlines():
             match = re.match(r'^\s*(?:[-+*]|\d+[.)])\s+\[([^\]]*)\][ \t]*(.*)$', line)
             if not match:
                 continue
@@ -101,12 +102,12 @@ def inspect(args):
         text = data.decode('utf-8')
         name = str(source.relative_to(root))
         snapshots[name] = hashlib.sha256(data).hexdigest()
-        for target, _ in h.markdown_targets(text):
+        for target, _ in md.markdown_targets(text):
             try:
-                local = h.local_markdown_target(source, target)
+                local = md.local_markdown_target(source, target)
                 if local is not None and not local.exists():
                     broken.append({'source': name, 'target': target, 'reason': '本地目标不存在'})
-            except (h.HarnessError, OSError, ValueError) as exc:
+            except (h.HarnessError, md.MarkdownError, OSError, ValueError) as exc:
                 broken.append({'source': name, 'target': target, 'reason': str(exc)})
     checks = {'links': verdict('failed' if broken else 'passed', broken=broken),
               'identity': identity(status_path, status_path.read_text(), task_path, args.entry_prefix)}
@@ -140,7 +141,7 @@ def main():
     args = parser.parse_args()
     try:
         report = inspect(args)
-    except (h.HarnessError, OSError, ValueError, KeyError, TypeError, RuntimeError) as exc:
+    except (h.HarnessError, md.MarkdownError, OSError, ValueError, KeyError, TypeError, RuntimeError) as exc:
         report = {'mechanical_status': 'unknown', 'error': str(exc), 'semantic_review_required': True}
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return {'passed': 0, 'failed': 1, 'unknown': 2}[report['mechanical_status']]
