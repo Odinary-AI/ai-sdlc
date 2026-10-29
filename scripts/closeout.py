@@ -95,14 +95,18 @@ def inspect(args):
         h.require(task_path.is_file(), '指定的原始任务来源不存在或非文件')
     sources = [status_path, *([task_path] if task_path else []),
                *(h.safe(root, path) for path in args.document)]
-    snapshots, broken = {}, []
+    snapshots, broken, fragments = {}, [], []
     for source in dict.fromkeys(sources):
         h.require(source.is_file(), f'来源不是文件: {source}')
         data = source.read_bytes()
         text = data.decode('utf-8')
         name = str(source.relative_to(root))
         snapshots[name] = hashlib.sha256(data).hexdigest()
-        for target, _ in md.markdown_targets(text):
+        for target, _ in md.markdown_targets(md.fragment_structure(text, preserve_inline=True) if args.fragments else text):
+            if args.fragments:
+                result = md.local_markdown_fragment(source, target, root=root, rule=args.fragments)
+                if result is not None:
+                    fragments.append({'source': name, 'target': target, **result})
             try:
                 local = md.local_markdown_target(source, target)
                 if local is not None and not local.exists():
@@ -111,6 +115,11 @@ def inspect(args):
                 broken.append({'source': name, 'target': target, 'reason': str(exc)})
     checks = {'links': verdict('failed' if broken else 'passed', broken=broken),
               'identity': identity(status_path, status_path.read_text(), task_path, args.entry_prefix)}
+    if args.fragments:
+        fragment_states = [item['status'] for item in fragments]
+        checks['fragments'] = verdict(
+            'failed' if 'failed' in fragment_states else ('unknown' if 'unknown' in fragment_states else 'passed'),
+            rule=args.fragments, items=fragments)
     if args.harness_task:
         t, _ = h.read_task(root, args.harness_task)
         # This does not run checks or write close receipts/status. Existing evidence rules own the verdict.
@@ -138,6 +147,7 @@ def main():
     parser.add_argument('--required-section', action='append', default=[], help='文档模式已存在的必需复选清单标题，可重复；不包括暂缓/范围外清单')
     parser.add_argument('--document', action='append', default=[], help='额外核对本地链接的原始文档')
     parser.add_argument('--claim', choices=('complete', 'partial'), required=True, help='本次拟作出的声明；不从正文猜测')
+    parser.add_argument('--fragments', choices=('simple-atx-v1',), help='显式启用受限本地片段核对；未知不算通过')
     args = parser.parse_args()
     try:
         report = inspect(args)

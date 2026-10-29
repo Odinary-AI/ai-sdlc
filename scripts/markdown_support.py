@@ -186,3 +186,100 @@ def rule_sections(path, titles):
         ranges.append(''.join(lines[start:end]))
     return '\n'.join(ranges).encode()
 
+
+def fragment_structure(text, preserve_inline=False):
+    """Optional inspection only: expose container fences to the existing masker."""
+    lines = []
+    for line in text.splitlines(keepends=True):
+        # Strip quote/list prefixes for fence recognition, never change default parsing.
+        while True:
+            stripped = re.sub(r'^ {0,3}(?:>[ \t]?|(?:[-+*]|[0-9]+[.)])[ \t]+)', '', line)
+            if stripped == line:
+                break
+            line = stripped
+        lines.append(line)
+    return markdown_structure(''.join(lines), preserve_inline=preserve_inline)
+
+
+def markdown_fragment(text, fragment, rule='simple-atx-v1'):
+    """Check an already decoded fragment using a deliberately bounded rule.
+
+    Plain ATX titles: Unicode letters/numbers/marks, '_' and '-' survive;
+    whitespace becomes '-', punctuation is removed, lowercase, duplicates -1/-2.
+    Explicit quoted HTML id and <a name> are supported outside examples.
+    Unsupported heading syntax is unknown, never evidence of absence.
+    """
+    import unicodedata
+    from html.parser import HTMLParser
+
+    if rule != 'simple-atx-v1':
+        return {'status': 'unknown', 'reason': '未支持的标题规则'}
+    body = fragment_structure(text, preserve_inline=True)
+    explicit, generated, uncertain = set(), set(), []
+
+    class Anchors(HTMLParser):
+        def handle_starttag(self, tag, attrs):
+            for key, value in attrs:
+                if value is not None and (key == 'id' or (tag == 'a' and key == 'name')):
+                    explicit.add(value)
+        handle_startendtag = handle_starttag
+
+    # Inline code must not create HTML anchors.
+    parser = Anchors(convert_charrefs=True)
+    html_body = fragment_structure(text)
+    html_body = re.sub(r'\\([^\n])', lambda m: '&lt;' if m[1] == '<' else m[0], html_body)
+    parser.feed(html_body); parser.close()
+    if re.search(r'^ {0,3}(?:>[ \t]*|[-+*][ \t]+|[0-9]+[.)][ \t]+)#+',
+                 markdown_structure(text, preserve_inline=True), re.M):
+        uncertain.append('容器标题')
+    for line in body.splitlines():
+        heading = re.fullmatch(r' {0,3}(#{1,6})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*', line)
+        if heading:
+            title = heading[2]
+            if re.search(r'[`*\[\]<>\\&{}~]', title) or re.search(r'(?<!\w)_|_(?!\w)', title):
+                uncertain.append('复杂标题语法')
+                continue
+            slug = ''.join(c for c in title.lower()
+                           if unicodedata.category(c)[0] in 'LNM' or c in '_-' or c.isspace())
+            slug = re.sub(r'\s', '-', slug)
+            candidate, n = slug, 0
+            while candidate in generated:
+                n += 1; candidate = f'{slug}-{n}'
+            generated.add(candidate)
+        elif re.match(r'^ {0,3}(?:=+|-+)\s*$', line) or re.match(r'^\s*>.*#', line):
+            uncertain.append('可能的非ATX标题')
+    # HTML heading/rendered constructs can introduce a different heading sequence.
+    if re.search(r'<(?:h[1-6]|script|style|pre|div)\b', body, re.I):
+        uncertain.append('HTML渲染块')
+    if fragment in explicit:
+        return {'status': 'passed', 'kind': 'explicit'}
+    if uncertain:
+        return {'status': 'unknown', 'reason': '、'.join(dict.fromkeys(uncertain))}
+    if fragment in generated:
+        return {'status': 'passed', 'kind': 'heading'}
+    return {'status': 'failed', 'reason': '所选规则下片段不存在'}
+
+
+def local_markdown_fragment(source, target, *, root, rule='simple-atx-v1'):
+    """Optional fragment inspection, with bounded local reads and no network."""
+    try:
+        uri = urlsplit(target)
+        if not uri.fragment:
+            return None
+        if uri.scheme or uri.netloc:
+            return {'status': 'unknown', 'reason': '外部片段不访问网络'}
+        local = local_markdown_target(source, target) or source
+        resolved = local.resolve()
+        if not resolved.is_relative_to(root.resolve()):
+            return {'status': 'unknown', 'reason': '片段目标在项目边界外'}
+        if not resolved.exists():
+            return {'status': 'failed', 'reason': '本地目标不存在'}
+        if resolved.suffix.lower() not in ('.md', '.markdown') or not resolved.is_file():
+            return {'status': 'unknown', 'reason': '非Markdown片段目标'}
+        data = resolved.read_bytes()
+        import hashlib
+        return {**markdown_fragment(data.decode('utf-8'), unquote(uri.fragment), rule),
+                'target_path': str(resolved.relative_to(root.resolve())),
+                'target_sha256': hashlib.sha256(data).hexdigest()}
+    except (OSError, ValueError, RuntimeError) as exc:
+        return {'status': 'unknown', 'reason': str(exc)}
