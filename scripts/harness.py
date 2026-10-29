@@ -17,7 +17,7 @@ import uuid
 import fcntl
 import importlib.util
 
-VERSION = '2.1.0-dev.2'
+VERSION = '2.1.0-dev.3'
 TASK_STATE_LABELS = {'not_started': '未开始', 'in_progress': '进行中', 'blocked': '阻塞',
                      'interrupted': '已中断', 'completed': '已完成', 'cancelled': '已取消'}
 PACKAGE = Path(__file__).resolve().parents[1]
@@ -199,6 +199,49 @@ def local_markdown_target(source, target):
     except markdown_support.MarkdownError as exc:
         raise HarnessError(str(exc)) from exc
 
+def direct_check_entries(root, argv):
+    """Recognize explicit executables and a bounded Python script syntax only."""
+    entries = []
+    first = Path(argv[0])
+    python = re.fullmatch(r'python(?:\d+(?:\.\d+)*)?', first.name)
+    if not python and '/' in argv[0] and (not first.is_absolute() or first.is_relative_to(root)):
+        entries.append(first)
+    if python:
+        rest = list(argv[1:])
+        while rest and rest[0] in ('-B', '-u', '-I', '-E', '-s', '-S', '-O', '-OO'):
+            rest.pop(0)
+        if rest and rest[0] == '--':
+            rest.pop(0)
+        if rest and rest[0] != '-' and not rest[0].startswith('-'):
+            candidate = Path(rest[0])
+            if not candidate.is_absolute() or candidate.is_relative_to(root):
+                entries.append(candidate)
+    return list(dict.fromkeys(str(p.relative_to(root) if p.is_absolute() else p) for p in entries))
+
+
+def entry_input_gaps(root, cid, check):
+    gaps = []
+    members = {}
+    inputs = [safe(root, name) for name in check['inputs']]
+    for rel in direct_check_entries(root, check['argv']):
+        entry = safe(root, rel)
+        covered = any(entry == mapped or (entry.is_file() and mapped.is_file() and entry.samefile(mapped))
+                      for mapped in inputs if not mapped.is_dir())
+        for mapped in inputs:
+            if covered:
+                break
+            if mapped.is_dir():
+                try:
+                    if mapped not in members:
+                        members[mapped] = {p.resolve() for p in input_files(root, mapped)}
+                    covered = entry.resolve() in members[mapped]
+                except (HarnessError, OSError, RuntimeError) as exc:
+                    gaps.append(f'{cid}: 入口输入目录无法核对: {exc}')
+        if not covered:
+            gaps.append(f'{cid}: 本地执行入口 {rel} 未纳入inputs；添加该文件或覆盖它的目录，复杂包装及间接依赖仍须显式核对')
+    return gaps
+
+
 def doctor(root, c, check_ids=None):
     validate_config(root, c, check_ids)
     gaps, files = [], []
@@ -215,6 +258,7 @@ def doctor(root, c, check_ids=None):
     if not c['checks']:
         gaps.append('尚未配置项目验证命令')
     for cid in c['checks'] if check_ids is None else sorted(check_ids):
+        gaps.extend(entry_input_gaps(root, cid, c['checks'][cid]))
         for rel in c['checks'][cid]['inputs']:
             source = safe(root, rel)
             if not source.exists():
@@ -557,7 +601,10 @@ def human_summary(t, assessment):
             'note': '说明由开发 AI 记录；检查条件满足不代表语义或人的确认真实。'}
 
 def contract(t):
-    return {k: t[k] for k in ('id', 'goal', 'scope', 'authorization', 'acceptance')}
+    result = {k: t[k] for k in ('id', 'goal', 'scope', 'authorization', 'acceptance')}
+    if t.get('scan_required'):
+        result['scan_required'] = True
+    return result
 
 def review_record(t):
     managed = {'state', 'updated_at', 'next_action', 'next_reason',
@@ -656,6 +703,7 @@ def resolved_run(root, tid, runid, summary_path):
 
 def validate_task(t, c):
     require(t.get('schema_version') in (1,2), '未知任务版本')
+    require('scan_required' not in t or type(t['scan_required']) is bool, 'scan_required 须为布尔值')
     if t['schema_version'] == 2:
         require(all(isinstance(t.get(k), list) and all(isinstance(x, dict) for x in t[k]) for k in ('decisions','changes','followups','human_items','risk_routes')), 'v2记录列表无效')
         require(isinstance(t.get('purpose'), dict) and isinstance(t.get('document_sync'), dict), 'v2目标与同步字段缺失')
@@ -785,6 +833,8 @@ def test_counts_pass(counts, chk):
 
 def fingerprints(root, c, t, cid):
     chk = c['checks'][cid]
+    entry_gaps = entry_input_gaps(root, cid, chk)
+    require(not entry_gaps, '；'.join(entry_gaps))
     paths = set(chk['inputs']) | {c['authorities'][k] for k in ('requirements', 'validation', 'agent_policy')}
     explicit = set()
     for rel in chk['inputs']:
@@ -975,6 +1025,8 @@ def gate_inputs(root, c, ids):
     """Same declared inputs, without creating a synthetic task or acceptance state."""
     paths = {'.harness/project.json', *c['authorities'].values()}
     for cid in ids:
+        entry_gaps = entry_input_gaps(root, cid, c['checks'][cid])
+        require(not entry_gaps, '；'.join(entry_gaps))
         paths.update(c['checks'][cid]['inputs'])
     files = {}
     for rel in sorted(paths):
@@ -1308,6 +1360,9 @@ def assess(root, c, t):
     for gap in rgaps:
         add_gap(gap, 'task_record_gap', '核对任务对应字段与引用材料，按现行依据补齐；草稿不代替真实处置。')
     scan = scan_coverage.evaluate(root, task_path(root, t['id']))
+    if t.get('scan_required') and not scan['present']:
+        add_gap('已声明正式扫描，缺少 harness-scan 覆盖块', 'scan_record_missing',
+                '按已确认扫描范围建立真实覆盖记录；不能以普通任务通过替代扫描义务。')
     for gap in scan['gaps']:
         add_gap('扫描覆盖: ' + gap, 'scan_coverage_gap', '核对任务覆盖块、专项与引用证据，补齐适用调查或明确未完成。')
     if scan['present']:
@@ -1539,6 +1594,7 @@ def main(argv=None):
     p.add_argument('--mapping'); p.add_argument('--apply', action='store_true')
     sub.add_parser('doctor', help='检查接入、配置、真实内容与引用')
     p = sub.add_parser('begin', help='从 JSON 规格建立唯一任务记录'); p.add_argument('--spec', required=True)
+    p.add_argument('--scan-required', action='store_true', help='显式声明本任务必须有扫描覆盖块，不从正文猜测')
     p = sub.add_parser('verify', help='实际执行项目配置的检查并保存独立 RUN'); p.add_argument('task'); p.add_argument('check')
     p = sub.add_parser('run-after', help='本次指定检查全部有效后执行已授权动作；可选且不授予权限')
     p.add_argument('task'); p.add_argument('--check', action='append', required=True)
@@ -1569,6 +1625,9 @@ def main(argv=None):
             result = gate(root, a.stage, a.source, a.ref)
         else:
             spec = load(Path(a.spec)) if a.command == 'begin' else None
+            if a.command == 'begin' and a.scan_required:
+                require(isinstance(spec, dict), '任务规格必须是 JSON 对象')
+                spec['scan_required'] = True
             selection = None if a.command == 'doctor' else task_check_ids(spec if spec is not None else read_task(root, a.task)[0])
             c = config(root, selection)
             if a.command == 'doctor': result = doctor(root, c)
