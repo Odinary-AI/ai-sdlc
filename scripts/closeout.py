@@ -17,12 +17,14 @@ def verdict(status, **details):
     return {'status': status, **details}
 
 
-def identity(status_path, text, task_path, prefixes):
+def identity(status_path, text, task_path, prefixes, definitions_text=None):
     if task_path is None or not prefixes or any(not p.strip() for p in prefixes):
         return verdict('unknown', reason='缺少明确任务来源或当前入口前缀；不按任务编号猜测。')
     cleaned = md.markdown_structure(text, preserve_inline=True)
     # Reuse the common parser for both inline and single-line reference definitions.
-    definitions = '\n'.join(line for line in cleaned.splitlines()
+    definitions_source = (md.markdown_structure(definitions_text, preserve_inline=True)
+                          if definitions_text is not None else cleaned)
+    definitions = '\n'.join(line for line in definitions_source.splitlines()
                             if re.match(r'^ {0,3}\[[^\]]+\]:', line))
     entries, missing, ambiguous = [], [], []
     for prefix in dict.fromkeys(prefixes):
@@ -113,8 +115,14 @@ def inspect(args):
                     broken.append({'source': name, 'target': target, 'reason': '本地目标不存在'})
             except (h.HarnessError, md.MarkdownError, OSError, ValueError) as exc:
                 broken.append({'source': name, 'target': target, 'reason': str(exc)})
+    identity_text = (md.rule_sections(status_path, [args.current_section]).decode('utf-8')
+                     if args.current_section else status_path.read_text())
     checks = {'links': verdict('failed' if broken else 'passed', broken=broken),
-              'identity': identity(status_path, status_path.read_text(), task_path, args.entry_prefix)}
+              'identity': identity(status_path, identity_text, task_path, args.entry_prefix,
+                                   status_path.read_text())}
+    if args.current_section:
+        checks['identity']['section'] = args.current_section
+        checks['identity']['line_basis'] = 'section-relative'
     if args.fragments:
         fragment_states = [item['status'] for item in fragments]
         checks['fragments'] = verdict(
@@ -141,6 +149,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', required=True)
     parser.add_argument('--status', required=True, help='项目内原状态入口路径')
+    parser.add_argument('--current-section', help='只在唯一指定ATX章节内核对入口身份；历史仍核对链接')
     parser.add_argument('--task', help='文档模式原任务路径；不要求特定文件名')
     parser.add_argument('--harness-task', help='脚本模式明确任务ID，复用只读assess')
     parser.add_argument('--entry-prefix', action='append', default=[], help='当前入口所在行的明确字面前缀，可重复；逐行核对唯一的本地链接')

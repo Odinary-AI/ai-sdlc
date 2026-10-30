@@ -150,6 +150,39 @@ def suggest(root, source, task=None, base=None):
             'boundary': '只读建议，不执行检查或修改验收；未映射不等于无需验证，已有组合覆盖仅按显式satisfied_by判断。'}
 
 
+def consumers(root, symbols, paths):
+    """Locate literal references; deliberately not a dependency graph."""
+    if any(not symbol.strip() or '\n' in symbol or '\r' in symbol for symbol in symbols):
+        raise ValueError('symbol须为非空单行字面文本')
+    paths = [relative(p) for p in paths]
+    actual = git(root, 'rev-parse', '--show-toplevel').stdout.decode().strip()
+    if Path(actual).resolve() != root:
+        raise ValueError('--root须为Git工作树根目录')
+    files = names(git(root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard').stdout)
+    selected = sorted(p for p in files if not paths or matches(p, paths))
+    hits, skipped = [], []
+    for name in selected:
+        path = root / name
+        # Do not traverse links, including a linked parent of a tracked file.
+        if path.is_symlink() or path.resolve() != path.absolute():
+            skipped.append({'path': name, 'reason': 'symlink'}); continue
+        try:
+            with path.open('rb') as stream:
+                data = stream.read(1024 * 1024 + 1)
+            if len(data) > 1024 * 1024 or b'\0' in data:
+                skipped.append({'path': name, 'reason': 'large_or_binary'}); continue
+            content = data.decode('utf-8')
+        except (OSError, UnicodeError) as exc:
+            skipped.append({'path': name, 'reason': type(exc).__name__}); continue
+        for number, line in enumerate(content.splitlines(), 1):
+            found = [symbol for symbol in symbols if symbol in line]
+            if found:
+                hits.append({'path': name, 'line': number, 'symbols': found})
+    return {'source': 'worktree', 'symbols': symbols, 'paths': paths,
+            'files_considered': len(selected), 'candidates': hits, 'skipped': skipped,
+            'boundary': '仅字面引用候选（含注释/历史）；不证明调用、依赖完整或测试覆盖。核对候选实际调用与检查入口，再复用suggest映射；无命中及跳过须人工判断。不执行检查、不修改文件。'}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='command', required=True)
@@ -164,9 +197,16 @@ def main():
             p.add_argument('--exclude-reason')
         else:
             p.add_argument('--task', help='可选比较原任务已选检查，不改任务')
+    p = sub.add_parser('consumers')
+    p.add_argument('--root', required=True)
+    p.add_argument('--symbol', action='append', required=True)
+    p.add_argument('--path', action='append', default=[])
     args = parser.parse_args()
     try:
         root = Path(args.root).resolve(strict=True)
+        if args.command == 'consumers':
+            print(json.dumps(consumers(root, args.symbol, args.path), ensure_ascii=False, indent=2))
+            return 0
         result = (format_check(root, args.source, args.path, args.exclude, args.exclude_reason, args.base)
                   if args.command == 'format' else suggest(root, args.source, args.task, args.base))
         print(json.dumps(result, ensure_ascii=False, indent=2))

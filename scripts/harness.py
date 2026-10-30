@@ -17,7 +17,7 @@ import uuid
 import fcntl
 import importlib.util
 
-VERSION = '2.1.0-dev.3'
+VERSION = '2.1.0-dev.4'
 TASK_STATE_LABELS = {'not_started': '未开始', 'in_progress': '进行中', 'blocked': '阻塞',
                      'interrupted': '已中断', 'completed': '已完成', 'cancelled': '已取消'}
 PACKAGE = Path(__file__).resolve().parents[1]
