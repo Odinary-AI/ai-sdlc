@@ -2,7 +2,7 @@
 name: ai-sdlc
 description: Explicitly invoked project engineering mechanism for individual developers and one-person companies. Adopt a project, execute or resume an authorized task, inspect and clean legacy code and project files, walk through architecture and module contracts, carry out integrated project governance, and check evidence-backed delivery. Invoke only when the user explicitly requests this skill; ordinary discussion does not authorize adoption.
 metadata:
-  version: "2.1.0-dev.4"
+  version: "2.2.0-dev.0"
 ---
 
 # AI工程机制
@@ -37,7 +37,7 @@ metadata:
 
 ## 执行工具
 
-脚本模式使用本 Skill 的 `scripts/harness.py`，带 `--root` 指定目标项目。运行 `--help` 或阅读接口说明后选择命令，不把文档中的示例路径照抄执行。核心脚本只需 Python 3.10+，支持 macOS/Linux。可选[Git输入快照](references/cli.md#可选git输入快照)另需Git，用于对象清单核对，不替代验证或改变模式。
+脚本模式使用本 Skill 的 `scripts/harness.py`，带 `--root` 指定目标项目。运行 `--help` 或阅读接口说明后选择命令，不把文档中的示例路径照抄执行。核心脚本只需 Python 3.10+，支持 macOS/Linux。可选[Git输入快照](references/cli.md#可选git输入快照)另需Git，用于对象清单核对，不替代验证或改变模式。复杂项目可按[当前要求追踪与规格收敛](references/lifecycle.md#当前要求追踪与规格收敛)维护少量稳定ID，两种模式均可选用[只读追踪工具](references/cli.md#当前要求追踪)；它不运行测试或判断需求完整。
 
 恢复与交付命令提供验收—检查—证据视图及失效定位；接入或相关机制变化时可复用随包自检。用法和边界见[脚本接口](references/cli.md#诊断与验收视图)。
 
