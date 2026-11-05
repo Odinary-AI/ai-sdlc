@@ -17,7 +17,7 @@ import uuid
 import fcntl
 import importlib.util
 
-VERSION = '2.2.0-dev.0'
+VERSION = '2.2.1-dev.0'
 TASK_STATE_LABELS = {'not_started': '未开始', 'in_progress': '进行中', 'blocked': '阻塞',
                      'interrupted': '已中断', 'completed': '已完成', 'cancelled': '已取消'}
 PACKAGE = Path(__file__).resolve().parents[1]
@@ -242,7 +242,30 @@ def entry_input_gaps(root, cid, check):
     return gaps
 
 
-def doctor(root, c, check_ids=None):
+def task_write_targets(root, tid):
+    """Identify existing aliases, including directories that will gain a new file."""
+    task = task_path(root, tid)
+    receipts = safe(root, f'.harness/close/{tid}')
+    targets = {}
+    for path in (task, receipts):
+        resolved = path.resolve()
+        for ancestor in (resolved, *resolved.parents):
+            if not ancestor.is_relative_to(root):
+                break
+            if ancestor.exists():
+                st = ancestor.stat()
+                targets[st.st_dev, st.st_ino] = str(path.relative_to(root))
+    return targets
+
+
+def reject_write_target(path, targets):
+    if targets:
+        st = path.stat()
+        conflict = targets.get((st.st_dev, st.st_ino))
+        require(conflict is None, f'检查输入 {path} 与当前任务写入路径 {conflict} 冲突；请分离输入和输出')
+
+
+def doctor(root, c, check_ids=None, task_id=None):
     validate_config(root, c, check_ids)
     gaps, files = [], []
     for role, rel in c['authorities'].items():
@@ -257,6 +280,15 @@ def doctor(root, c, check_ids=None):
         gaps.append('缺少项目规则确认或有效授权来源')
     if not c['checks']:
         gaps.append('尚未配置项目验证命令')
+    targets = task_write_targets(root, task_id) if task_id else {}
+    if targets:
+        for role in ('requirements', 'validation', 'agent_policy'):
+            policy = safe(root, c['authorities'][role])
+            if policy.is_file():
+                try:
+                    reject_write_target(policy, targets)
+                except HarnessError as exc:
+                    gaps.append(f'{role}: {exc}')
     for cid in c['checks'] if check_ids is None else sorted(check_ids):
         gaps.extend(entry_input_gaps(root, cid, c['checks'][cid]))
         for rel in c['checks'][cid]['inputs']:
@@ -266,7 +298,9 @@ def doctor(root, c, check_ids=None):
                 continue
             status = safe(root, c['authorities']['status'])
             try:
-                members = input_files(root, source) if source.is_dir() else [source]
+                members = input_files(root, source, targets) if source.is_dir() else [source]
+                for member in members:
+                    reject_write_target(member, targets)
                 if any(member.resolve() == status.resolve() or
                        (status.exists() and member.samefile(status)) for member in members):
                     gaps.append(f'{cid}: 检查输入 {rel} 包含状态文件 {c["authorities"]["status"]}；状态写回会使证据失效，请分离状态或调整输入来源，不自动排除该输入')
@@ -314,6 +348,15 @@ def adopt(root, mapping_path=None, apply=False):
     require(isinstance(mapping, dict), '项目映射必须为对象')
     require(isinstance(mapping.get('authorities', {}), dict), 'authorities 必须为对象')
     cp = safe(root, '.harness/project.json')
+    if 'check_suggestions' in mapping:
+        spec = importlib.util.spec_from_file_location('sdlc_git_checks', PACKAGE/'scripts/git_checks.py')
+        git_checks = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(git_checks)
+        existing = config(root) if cp.exists() else {'checks': {}}
+        try:
+            git_checks.validated_suggestions({**existing, **mapping})
+        except ValueError as exc:
+            raise HarnessError(str(exc)) from exc
     if cp.exists():
         c = config(root)
         if mapping_path:
@@ -329,8 +372,13 @@ def adopt(root, mapping_path=None, apply=False):
         require(not candidates, '发现验证规则候选，先明确 validation 映射: ' + ', '.join(candidates))
     c = {'schema_version': 1, 'mechanism_version': VERSION, 'authorities': authorities,
          'confirmation_source': mapping.get('confirmation_source', ''), 'checks': mapping.get('checks', {})}
-    if 'gates' in mapping:
-        c['gates'] = mapping['gates']
+    for field in ('gates', 'check_suggestions'):
+        if field in mapping:
+            c[field] = mapping[field]
+    unsupported = sorted(set(mapping) - set(c))
+    require(not unsupported, '首次接入映射含未支持字段：' + ', '.join(unsupported))
+    for key in ('schema_version', 'mechanism_version'):
+        require(key not in mapping or mapping[key] == c[key], f'{key} 与新建配置不一致')
     # Validate against the actual project so existing symlink aliases are visible.
     validate_config(root, c)
     actions = []
@@ -724,7 +772,24 @@ def validate_task(t, c):
         require(all(x in c['checks'] for x in checks), '验收标准引用未知检查')
         require(type(ac.get('human_required', False)) is bool, 'human_required 必须为布尔值')
 
+def protect_task_aliases(root, c, t):
+    # An atomic replacement would detach a selected hard link, making a retry
+    # see an apparently independent input containing the obsolete task bytes.
+    task = task_path(root, t['id'])
+    if not task.exists() or (task.stat().st_nlink == 1 and not task.is_symlink()):
+        return
+    paths = {c['authorities'][role] for role in ('requirements', 'validation', 'agent_policy')}
+    for cid in task_check_ids(t):
+        paths.update(c['checks'][cid]['inputs'])
+    for rel in paths:
+        source = safe(root, rel)
+        for member in input_files(root, source) if source.is_dir() else [source]:
+            if member.is_file() and member.samefile(task) and (task.is_symlink() or member.resolve() != task.resolve()):
+                raise HarnessError(f'任务写回会拆开检查输入别名 {rel} 与 {t["id"]}；先分离输入再重试')
+
+
 def write_task(root, c, t, body):
+    protect_task_aliases(root, c, t)
     t['updated_at'] = now()
     newblock = '```harness-task\n' + json.dumps(t, ensure_ascii=False, indent=2) + '\n```'
     updated = BLOCK.sub(lambda _: newblock, body, count=1)
@@ -750,8 +815,10 @@ def render_status(root, c, t):
     section = f'{START}\n当前任务：[{t["id"]}]({rel})\n\n目标：{t["goal"]}\n\n任务执行状态：{TASK_STATE_LABELS.get(t["state"], t["state"])}\n\n下一动作：{t["next_action"]}\n\n详细验收、验证和人工验收以任务记录为准。\n{END}'
     if t.get('schema_version') == 2:
         snapshot = human_summary(t, assess(root, c, t))
-        extra = [f'更新于：{t["updated_at"]}', f'用户结果：{snapshot["user_outcome"]}',
-                 '当前检查：' + ('条件满足' if snapshot['evidence_conditions_met'] else '存在缺口')]
+        extra = [f'更新于：{t["updated_at"]}']
+        if snapshot['user_outcome'] != t['goal']:
+            extra.append(f'用户结果：{snapshot["user_outcome"] or "未填写"}')
+        extra.append('当前检查：' + ('条件满足' if snapshot['evidence_conditions_met'] else '存在缺口'))
         if snapshot['next_reason']: extra.append(f'下一步原因：{snapshot["next_reason"]}')
         extra.extend('缺口：' + x for x in snapshot['gaps'])
         extra.extend(f'待人判断：{x.get("question")}；建议：{x.get("recommendation")}；材料：{x.get("materials")}' for x in snapshot['human_items'])
@@ -782,15 +849,17 @@ def begin(root, c, spec):
     validate_task(t, c)
     errors = task_structure_errors(t)
     require(not errors, '任务结构无效: ' + '；'.join(errors))
-    require(doctor(root, c, task_check_ids(t))['ready'], '任务前置未就绪；核对共同规则及所选检查缺口')
     with lock(root):
+        gaps = doctor(root, c, task_check_ids(t), t['id'])['gaps']
+        require(not gaps, '任务前置未就绪：' + '；'.join(gaps))
         require(not task_path(root, t['id']).exists(), '任务已存在；使用 resume，不覆盖')
         write_task(root, c, t, '# ' + t['id'] + '\n\n```harness-task\n{}\n```\n\n## 执行事实与决定\n\n任务建立。实施后在此记录实际差异、决定及后续事项。\n')
     return t
 
-def input_files(root, directory):
+def input_files(root, directory, write_targets=None):
     """Follow project-local directory aliases without silently losing dependencies."""
     files, pending = [], [(directory, frozenset())]
+    visited_directories = set()
     while pending:
         current, ancestors = pending.pop()
         try:
@@ -798,6 +867,8 @@ def input_files(root, directory):
         except (RuntimeError, OSError) as exc:
             raise HarnessError(f'输入目录无法解析: {current.relative_to(root)}: {exc}') from exc
         require(resolved not in ancestors, f'输入目录存在符号链接循环: {current.relative_to(root)}')
+        if write_targets:
+            visited_directories.add(resolved)
         lineage = ancestors | {resolved}
         for child in current.iterdir():
             if child.name in ('__pycache__', '.DS_Store'):
@@ -808,6 +879,9 @@ def input_files(root, directory):
                 pending.append((child, lineage))
             elif child.is_file():
                 files.append(child)
+    # Diagnose invalid or cyclic inputs before comparing legal directory aliases.
+    for visited in sorted(visited_directories):
+        reject_write_target(visited, write_targets)
     return sorted(files)
 
 
@@ -837,12 +911,22 @@ def fingerprints(root, c, t, cid):
     require(not entry_gaps, '；'.join(entry_gaps))
     paths = set(chk['inputs']) | {c['authorities'][k] for k in ('requirements', 'validation', 'agent_policy')}
     explicit = set()
+    targets = task_write_targets(root, t['id'])
     for rel in chk['inputs']:
         p = safe(root, rel)
-        explicit.update(x.resolve() for x in (input_files(root, p) if p.is_dir() else [p]))
+        try:
+            members = input_files(root, p, targets) if p.is_dir() else [p]
+            for member in members:
+                if member.exists():
+                    reject_write_target(member, targets)
+                explicit.add(member.resolve())
+        except HarnessError as exc:
+            raise HarnessError(f'{cid}: {exc}') from exc
     scoped = {}
     for role in ('requirements', 'validation', 'agent_policy'):
         path = safe(root, c['authorities'][role]).resolve()
+        if path.is_file():
+            reject_write_target(path, targets)
         titles = chk.get('rule_sections', {}).get(role)
         if path not in scoped:
             scoped[path] = titles
@@ -1109,6 +1193,7 @@ def gate(root, stage, source='worktree', ref=None):
                 env.pop(name, None)
             env.update(AI_PROJECT_HARNESS_REPORT=str(report), AI_PROJECT_HARNESS_OPTIONAL_TESTS=json.dumps(chk.get('optional_tests', [])),
                        AI_SDLC_GATE_ROOT=str(check_root), AI_SDLC_PROJECT_ROOT=str(root), AI_SDLC_INPUT_SOURCE=source,
+                       AI_SDLC_INPUT_IDENTITY=identity or '',
                        PYTHONDONTWRITEBYTECODE='1')
             rec = {'check_id': cid, 'argv': argv, 'overall_status': 'running', 'exit_code': None, 'counts': None, 'reason': ''}
             execute_process(check_root, argv, env, chk.get('timeout', 300), log, rec, lambda _: None)
@@ -1353,7 +1438,7 @@ def assess(root, c, t):
         add_gap('遗漏项目共同检查: ' + ', '.join(sorted(missing_common)), 'project_gate_missing',
                 '按现行项目gates.task补齐任务检查映射并执行；不能删掉项目义务来放行。',
                 refs=['.harness/project.json', task_ref])
-    for gap in doctor(root, c, task_check_ids(t))['gaps']:
+    for gap in doctor(root, c, task_check_ids(t), t['id'])['gaps']:
         add_gap(gap, 'project_prerequisite', '核对项目映射、实际文件与现行授权，补齐该共同前置后重新评估。',
                 'project', '.harness/project.json', ['.harness/project.json'])
     rgaps, materials = record_gaps(root, t)
@@ -1578,8 +1663,10 @@ def readable_resume(result):
              f'任务执行状态：{TASK_STATE_LABELS.get(t["state"], t["state"])}',
              f'下一动作：{t["next_action"]}', f'任务记录：{result["task_record"]}']
     if t['schema_version'] == 2:
-        lines += [f'用户结果：{t["purpose"].get("user_outcome", t["goal"]) or "未填写"}',
-                  f'更新于：{t.get("updated_at")}']
+        outcome = result['summary']['user_outcome']
+        if outcome != t['goal']:
+            lines.append(f'用户结果：{outcome or "未填写"}')
+        lines.append(f'更新于：{t.get("updated_at")}')
         if t.get('next_reason'): lines.append(f'下一步原因：{t["next_reason"]}')
         lines += [f'待人判断：{x.get("question") or "未填写"}；建议：{x.get("recommendation") or "未填写"}；材料：{x.get("materials") or "未填写"}' for x in t['human_items']]
     lines.extend(readable_assessment(assessment))

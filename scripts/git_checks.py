@@ -105,24 +105,12 @@ def format_check(root, source, paths=(), excludes=(), reason=None, base=None):
             'diagnostics': errors, 'boundary': '仅核对所选Git对象的空白错误；不暂存、不修改文件，不证明语义或并发冻结。'}
 
 
-def suggest(root, source, task=None, base=None):
-    fixed, _, tracked, untracked = changed(root, source, base)
-    config = json.loads((root/'.harness/project.json').read_text())
+def validated_suggestions(config):
     if not isinstance(config, dict):
         raise ValueError('项目配置须为对象')
     rules = config.get('check_suggestions', [])
     if not isinstance(rules, list) or not isinstance(config.get('checks'), dict):
         raise ValueError('check_suggestions须为数组且checks须为对象')
-    selected = None
-    if task is not None:
-        import harness as h
-        try:
-            h.identifier(task, 'task')
-            selected = h.task_check_ids(h.read_task(root, task)[0])
-        except h.HarnessError as exc:
-            raise ValueError(str(exc)) from exc
-    files = tracked | untracked
-    matched, covered, proposed, missing = [], set(), set(), set()
     for rule in rules:
         if not isinstance(rule, dict) or set(rule) - {'paths', 'checks', 'satisfied_by', 'reason'}:
             raise ValueError('建议映射包含无效字段')
@@ -136,7 +124,28 @@ def suggest(root, source, task=None, base=None):
             raise ValueError('建议映射引用未知检查')
         if not isinstance(rule.get('reason'), str) or not rule['reason'].strip():
             raise ValueError('建议映射缺少reason')
+        for path in rule['paths']:
+            relative(path)
+    return rules
+
+
+def suggest(root, source, task=None, base=None):
+    fixed, _, tracked, untracked = changed(root, source, base)
+    config = json.loads((root/'.harness/project.json').read_text())
+    rules = validated_suggestions(config)
+    selected = None
+    if task is not None:
+        import harness as h
+        try:
+            h.identifier(task, 'task')
+            selected = h.task_check_ids(h.read_task(root, task)[0])
+        except h.HarnessError as exc:
+            raise ValueError(str(exc)) from exc
+    files = tracked | untracked
+    matched, covered, proposed, missing = [], set(), set(), set()
+    for rule in rules:
         paths = [relative(p) for p in rule['paths']]
+        alternatives = rule.get('satisfied_by', [])
         affected = sorted(p for p in files if matches(p, paths))
         if affected:
             covered.update(affected); proposed.update(rule['checks'])
