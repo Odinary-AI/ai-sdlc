@@ -1,8 +1,9 @@
 ---
 name: ai-sdlc
 description: Explicitly invoked project engineering mechanism for individual developers and one-person companies. Adopt a project, execute or resume an authorized task, inspect and clean legacy code and project files, walk through architecture and module contracts, carry out integrated project governance, and check evidence-backed delivery. Invoke only when the user explicitly requests this skill; ordinary discussion does not authorize adoption.
+license: MIT
 metadata:
-  version: "2.2.1-dev.1"
+  version: "2.2.1-dev.4"
 ---
 
 # AI工程机制
@@ -10,6 +11,8 @@ metadata:
 为 AI 开发配备系统化的工程流程和工具，引导、激发并监督 AI 有序、完整、高质量地执行项目开发过程，旨在将 AI 的个体能力组织成持续、可靠的项目交付能力，服务个人开发者和一人公司（OPC）。完整指当前范围内适用职责不遗漏；具体方法由 AI 在授权与项目约束内选择。
 
 用户显式调用后，在当前授权任务内持续执行适用步骤，不要求用户逐条提醒。新会话沿[项目接手与任务恢复](references/lifecycle.md#项目接手与任务恢复)定位事实；Skill 加载与已采纳项目规则的生效边界见[任务流程](references/lifecycle.md#模式与生效边界)。
+
+首次安装、体验或排查上手问题时，使用面向人的[使用入口](README.md)及[首任务教程](examples/first-task/README.md)；已有项目执行仍沿下述规则，不默认重跑教程。
 
 ## 选择当前工作
 
@@ -37,7 +40,7 @@ metadata:
 
 ## 执行工具
 
-脚本模式使用本 Skill 的 `scripts/harness.py`，带 `--root` 指定目标项目。运行 `--help` 或阅读接口说明后选择命令，不把文档中的示例路径照抄执行。核心脚本只需 Python 3.10+，支持 macOS/Linux。可选[Git输入快照](references/cli.md#可选git输入快照)另需Git，用于对象清单核对，不替代验证或改变模式。复杂项目可按[当前要求追踪与规格收敛](references/lifecycle.md#当前要求追踪与规格收敛)维护少量稳定ID，两种模式均可选用[只读追踪工具](references/cli.md#当前要求追踪)；它不运行测试或判断需求完整。
+脚本模式使用本 Skill 的 `scripts/harness.py`，带 `--root` 指定目标项目。运行 `--help` 或阅读接口说明后选择命令，不把文档中的示例路径照抄执行。核心脚本只需 Python 3.10+，目标兼容 macOS/Linux；具体版本与平台是否实测须核对交付证据，不能由目标范围推断。可选[Git输入快照](references/cli.md#可选git输入快照)另需Git，用于对象清单核对，不替代验证或改变模式。复杂项目可按[当前要求追踪与规格收敛](references/lifecycle.md#当前要求追踪与规格收敛)维护少量稳定ID，两种模式均可选用[只读追踪工具](references/cli.md#当前要求追踪)；它不运行测试或判断需求完整。
 
 恢复与交付命令提供验收—检查—证据视图及失效定位；接入或相关机制变化时可复用随包自检。用法和边界见[脚本接口](references/cli.md#诊断与验收视图)。
 

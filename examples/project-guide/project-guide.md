@@ -1,8 +1,8 @@
 <!-- guide-meta
 {
-  "date": "2026-10-09",
-  "version": "2.2.1-dev.1",
-  "identity": "发布适配源 SHA256 84a70924e32d848949804d388c72ef1f9d12d586d1fe5d7193dce39c77c6a395",
+  "date": "2026-11-10",
+  "version": "2.2.1-dev.4",
+  "identity": "发布适配源 SHA256 8927262bf257d4ee647c8ccd13d0a1ff7f5e370a90d3fc2999173044496edf78",
   "scope": "ai-sdlc项目概览参考快照；保留概览与三图，开发任务、实时状态及私有证据不随包。图来源改用包内同概念的规则或实现，不表示本机安装或远端发布已完成。现行规则以包内原文为准。",
   "title": "ai-sdlc · 项目概览与工程全景",
   "sources": [
@@ -26,7 +26,7 @@
 ## 核心能力｜能完成的工作与状态边界 {#capabilities}
 
 ```html
-<div class="pairs"><div><h3>接入、实施与恢复</h3><p>保留项目已有组织，映射真实规则和检查；按原任务及现场恢复，未知操作不盲目重放。</p></div><div><h3>验证、交付与治理</h3><p>运行选定检查、保存真实结果，核对相关输入与当前证据；按风险检查、修复及回顾。</p></div><div><h3>通用工程导览</h3><p>方法与模板随Skill分发；可选标准库工具支持同源HTML、节点、上下游及明确来源核对。文档模式或已有文档站可继续使用。</p></div><div><h3>实际状态分开判断</h3><p>已实现、已验证、任务完成、已安装、已推送和会话已加载不是同一件事。每项结论回查其对应对象与证据。</p></div></div><p class="source"><a href="../../SKILL.md">能力路由</a> · <a href="../../references/cli.md">工具接口与限制</a></p>
+<div class="pairs"><div><h3>接入、实施与恢复</h3><p>保留项目已有组织，映射真实规则和检查；按原任务及现场恢复，未知操作不盲目重放。</p></div><div><h3>验证、交付与治理</h3><p>运行选定检查、保存真实结果，核对相关输入与当前证据；按风险检查、修复及回顾。</p></div><div><h3>通用工程导览</h3><p>方法与模板随Skill分发；可选标准库工具支持同源HTML、节点、上下游及明确来源核对。文档模式或已有文档站可继续使用。</p></div><div><h3>要求追踪与行为核对</h3><p>复杂任务可用少量稳定ID连接要求、设计、实现和代表验证；结果、必要执行过程与完成声明分别查证，不把AI自述当作执行记录。</p></div><div><h3>实际状态分开判断</h3><p>已实现、已验证、任务完成、已安装、已推送和会话已加载不是同一件事。每项结论回查其对应对象与证据。</p></div></div><p class="source"><a href="../../SKILL.md">能力路由</a> · <a href="../../references/cli.md">工具接口与限制</a></p>
 ```
 
 ## 主流程｜从用户结果到工程交付 {#workflow}
@@ -253,7 +253,7 @@
     {
       "id": "harness",
       "label": "harness核心执行器",
-      "description": "adopt/doctor/任务更新、verify、共同assess、resume/close及run-after。",
+      "description": "adopt/doctor、任务更新、verify、共同assess、resume/close、run-after及选定对象gate；不判断授权来源真实性。",
       "basis": "observed",
       "sources": [
         {
@@ -296,7 +296,7 @@
       ],
       "position": {
         "column": 1,
-        "row": 3
+        "row": 4
       },
       "role": "data",
       "summary": "配置、任务、RUN及状态摘要"
@@ -341,7 +341,7 @@
     {
       "id": "snapshot",
       "label": "可选Git输入快照",
-      "description": "读取Git对象与内容身份，不运行检查、不自动参加close。",
+      "description": "读取Git对象与内容身份；gate用它导出固定对象再执行检查，工具本身不运行检查或自动参加close。",
       "basis": "observed",
       "sources": [
         {
@@ -371,6 +371,46 @@
       },
       "role": "optional",
       "summary": "同源展示 / 只读关系查询"
+    },
+    {
+      "id": "markdown",
+      "label": "共享Markdown解析",
+      "description": "markdown_support统一链接、章节及片段解析；独立于任务状态，harness保留兼容入口。",
+      "basis": "observed",
+      "sources": [
+        {
+          "path": "scripts/markdown_support.py"
+        }
+      ],
+      "position": {
+        "column": 0,
+        "row": 3
+      },
+      "role": "helper",
+      "summary": "链接 / 章节 / 片段"
+    },
+    {
+      "id": "readonly",
+      "label": "可选只读检查工具",
+      "description": "closeout核对当前入口与原任务；requirements_trace核对少量当前要求链接；git_checks检查选定对象及建议。结构通过不代替语义或实际测试。",
+      "basis": "observed",
+      "sources": [
+        {
+          "path": "scripts/closeout.py"
+        },
+        {
+          "path": "scripts/requirements_trace.py"
+        },
+        {
+          "path": "scripts/git_checks.py"
+        }
+      ],
+      "position": {
+        "column": 2,
+        "row": 3
+      },
+      "role": "optional",
+      "summary": "收口 / 要求追踪 / Git检查"
     }
   ],
   "edges": [
@@ -445,6 +485,38 @@
       "basis": "observed",
       "short_label": "输入身份",
       "category": "reference"
+    },
+    {
+      "from": "harness",
+      "to": "snapshot",
+      "label": "gate导出固定对象",
+      "short_label": "固定对象",
+      "basis": "observed",
+      "category": "optional"
+    },
+    {
+      "from": "harness",
+      "to": "markdown",
+      "label": "调用共享解析",
+      "short_label": "共享解析",
+      "basis": "observed",
+      "category": "primary"
+    },
+    {
+      "from": "readonly",
+      "to": "harness",
+      "label": "closeout复用assess",
+      "short_label": "同一判定",
+      "basis": "observed",
+      "category": "optional"
+    },
+    {
+      "from": "readonly",
+      "to": "markdown",
+      "label": "closeout及要求追踪复用解析",
+      "short_label": "共享解析",
+      "basis": "observed",
+      "category": "reference"
     }
   ],
   "groups": [
@@ -459,7 +531,9 @@
         "stop",
         "helpers",
         "snapshot",
-        "guide"
+        "guide",
+        "markdown",
+        "readonly"
       ]
     },
     {
@@ -651,5 +725,5 @@
 ## 当前限制｜运行、验证与未完成边界 {#limits}
 
 ```html
-<p>核心运行需要Python3.10+，声明平台macOS/Linux；新导览工具只使用标准库，生成离线HTML，明确输入变化后可只读核对漂移。普通来源链接不自动成为相关输入，实际使用时仍需对照阅读/生成关系补齐映射。</p><p>图的来源路径/行号及内容身份可机械核对，但关系含义、运行影响、项目验收和人的理解仍分别判断。上游/下游只沿本图已列关系；没有自动全语言知识图谱、实时看板、后台同步或云服务。</p><p>安装、推送与客户端加载分别记录，不宣称会话自动重载。工程检查和代表消费样例只支持其范围；其他平台、任意规模和长期理解收益仍未认证。</p><p class="source"><a href="../../references/verification.md">验证规则与证据边界</a> · <a href="../../references/cli.md">运行接口与环境</a></p><footer>独立离线导览 · 正文及图定义来自本Markdown源 · 快照身份与最新状态分别阅读。</footer>
+<p>核心运行需要Python3.10+，目标兼容macOS/Linux，具体实测组合以交付证据为准；导览工具只使用标准库，生成离线HTML，明确输入变化后可只读核对漂移。普通来源链接不自动成为相关输入，实际使用时仍需对照阅读/生成关系补齐映射。</p><p>图的来源路径/行号及内容身份可机械核对，但关系含义、运行影响、项目验收和人的理解仍分别判断。上游/下游只沿本图已列关系；没有自动全语言知识图谱、实时看板、后台同步或云服务。</p><p>安装、推送与客户端加载分别记录，不宣称会话自动重载。工程检查和代表消费样例只支持其范围；其他平台、任意规模和长期理解收益仍未认证。</p><p class="source"><a href="../../references/verification.md">验证规则与证据边界</a> · <a href="../../references/cli.md">运行接口与环境</a></p><footer>独立离线导览 · 正文及图定义来自本Markdown源 · 快照身份与最新状态分别阅读。</footer>
 ```

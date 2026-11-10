@@ -1,0 +1,18 @@
+{
+  "id": "TASK-001",
+  "goal": "让问候函数满足已写明的空白及空姓名行为",
+  "scope": "只修复练习greeting.py；保留测试和需求，不操作其他项目",
+  "authorization": "用户选择执行隔离的首任务教程",
+  "next_action": "先执行unit保留真实失败，再按requirements.md修复",
+  "acceptance": [{
+    "id": "AC-01",
+    "text": "普通姓名、空白、空输入和非ASCII/内部空格全部满足requirements.md",
+    "checks": ["unit"],
+    "human_required": false
+  }],
+  "document_sync": {
+    "reviewed": true,
+    "items": [],
+    "no_change_reason": "本练习需求、规则和测试已给定；任务正文记录实际修复与验证，不改变这些规范。"
+  }
+}

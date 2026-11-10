@@ -1,0 +1,19 @@
+{
+  "authorities": {
+    "entrypoint": "README.md",
+    "agent_policy": "AGENTS.md",
+    "requirements": "requirements.md",
+    "validation": "TESTING.md",
+    "status": "status.md"
+  },
+  "confirmation_source": "用户选择在独立练习目录执行本教程；授权只覆盖该练习。",
+  "checks": {
+    "unit": {
+      "purpose": "按练习需求验证问候函数",
+      "argv": ["python3", "unittest_report.py", "--start", "tests"],
+      "kind": "tests",
+      "inputs": ["greeting.py", "tests", "unittest_report.py"],
+      "timeout": 15
+    }
+  }
+}
