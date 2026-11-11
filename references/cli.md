@@ -384,7 +384,7 @@ required_views至少保留使用/协作和内部架构两个视角（默认两�
 }
 ```
 
-kind还支持collaboration/workflow/dataflow/lifecycle。可选node.position={column,row}安排层次（0–100整数，不重叠），role=component/actor/rule/template/core/data/helper/process/optional/result和summary组织节点视觉层级；可选groups[{id,label,members}]标记真实边界，成员不得重复或把非成员圈入边界。edge.category=primary/conditional/optional/feedback/reference及short_label仅表达作者已核对关系，不能凭样式推断事实。端口分散、正交走线和短标签辅助阅读，密集关系仍按节点详情/静态列表回查，不承诺所有图自动达到最佳布局。每图1–200节点、0–1000关系，稳定ID不重复且端点必须存在；上限是工具保护，不是推荐首页密度或理解效果承诺。build校验后以同目录候选原子替换；拒绝输出覆盖源、明确来源、生成器/展示资产、符号链接/硬链接别名及根外路径。输入根是用户指定项目，不支持将不可信网页或任意目录当作项目授权。JS数据和文本转义，静态节点/关系/来源详情仍可阅读；浏览器中选择节点、查询文字、两节点路径和上下游聚焦不运行工程动作。
+kind还支持collaboration/workflow/dataflow/lifecycle。可选node.position={column,row}安排层次（0–100整数，不重叠），role=component/actor/rule/template/core/data/helper/process/optional/result和summary组织节点视觉层级；可选groups[{id,label,members}]标记真实边界，成员不得重复或把非成员圈入边界。edge.category=primary/conditional/optional/feedback/reference及short_label仅表达作者已核对关系，不能凭样式推断事实。端口分散、正交走线和短标签辅助阅读，密集关系仍按节点详情/静态列表回查，不承诺所有图自动达到最佳布局。默认布局按三列换行；SVG按实际画布宽度设置最小显示宽度，过宽时图内滚动而非缩字。节点标题16px、关键说明/连线14px是随包外壳的基线，项目可按实际阅读目标调整并复验。长图示标签显示省略号，全文保留在详情/静态列表。build/check/inspect的stderr以`GUIDE_LAYOUT_REVIEW`报告宽图、穿过节点的连线、完全重合路径及未放置标签，提示包含view和适用edge索引；生成或同源检查成功不代表这些提示已解决，交付前按[图解可读性](maintenance.md#项目导览页)复核。检查不识别全部线交叉、语义和字体差异，不承诺自动最优布局。每图1–200节点、0–1000关系，稳定ID不重复且端点必须存在；上限是工具保护，不是推荐首页密度或理解效果承诺。build校验后以同目录候选原子替换；拒绝输出覆盖源、明确来源、生成器/展示资产、符号链接/硬链接别名及根外路径。输入根是用户指定项目，不支持将不可信网页或任意目录当作项目授权。JS数据和文本转义，静态节点/关系/来源详情仍可阅读；浏览器中选择节点、查询文字、两节点路径和上下游聚焦不运行工程动作。
 
 维护：工具/展示资产及上述可选接口变化时更新本节，消费项目已选输入变化按原验证策略核对；模板/工程事实仍沿各自唯一来源维护，不增第二套流水线或强制JSON台账。
 
@@ -429,6 +429,12 @@ python3 /实际位置/ai-sdlc/scripts/requirements_trace.py \
 `--source`必须位于项目根内，`--section`选择唯一精确ATX章节。章节内只接受一张简单pipe table，固定五列：`| ID | 当前要求 | 设计/接口 | 实现/方法 | 代表验证 |`，数据行至少一行；支持单元格中的`\|`，不扩展为通用Markdown表格渲染器。ID匹配`[A-Z][A-Z0-9]*-`加至少两位数字且不得重复。后四列各至少一个非图片本地Markdown链接；外链、越界、缺失目标及受限规则确认不存在的片段为违规。代码围栏、缩进代码和HTML注释中的伪章节／表格不提供数据。
 
 目标存在性包含目录；片段复用`simple-atx-v1`，同文件与跨文件均可。多张表、重复／缺失章节、非Markdown片段、复杂标题、不可读来源及调用错误属于unknown，不猜测通过。表格缺列、缺关系、非法／重复ID及确认的坏目标属于failed。JSON报告包含状态、来源及散列、章节、要求数、链接数、逐项关系、`semantic_review_required=true`和`tests_executed=false`。退出0仅表示所选机械项通过，1表示确认违规，2表示未知或调用／读取错误。报告不证明需求语义完整、链接关系正确、测试选择充分或测试已通过；维护与双向收口按[任务流程](lifecycle.md#当前要求追踪与规格收敛)执行。
+
+### 可选浏览器图解检查
+
+[guide-readability.js](../assets/guide-readability.js)是只读浏览器探针，不被产品页面自动加载，不需要为Skill核心安装Node或Playwright。在获准预览页面加载后，由现有浏览器工具执行该文件，再调用`auditGuideReadability()`取得结果；可传`{selector, minimumTextPx, minimumTitlePx}`对齐项目规范。选择器默认main，未找到时检查body；无已渲染SVG/文字返回失败。非SVG、图片文字、canvas及隐藏状态需另行观察，不能把本探针当所有图形格式的通用验收器。
+
+字号按CSS字号乘实际SVG屏幕变换计算，不只读源码声明；检查已识别node/edge-label/map-group底框的文字越界，以及宽图滚动入口和整页溢出。报告保留文本位置、实际尺寸与失败类别；合法局部滚动不当作整页溢出。默认标题16px、其他主要图文14px、来源角标12px对应随包外壳。返回passed仍须看真实截图、核对连线/箭头/对比度和实际键盘操作；故意缩小或制造长标签越界的坏例应检出，不能只证明正常图通过。自定义SVG类名不同的底框或复杂变换覆盖有限，按报告边界补查，不因没有匹配底框宣称无重叠。
 
 ## 受限导览预览
 

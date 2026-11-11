@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import tempfile
+import sys
 import unicodedata
 from urllib.parse import quote, urlsplit
 
@@ -223,6 +224,12 @@ def intersects(a, b, pad=0):
     return a[0] < b[0]+b[2]+pad and a[0]+a[2]+pad > b[0] and a[1] < b[1]+b[3]+pad and a[1]+a[3]+pad > b[1]
 
 
+def shortened(text, units):
+    """Bound the visual label; full authored text stays in accessible details."""
+    lines = wrapped(text, max(1, units - 1))
+    return lines[0] + ('…' if len(lines) > 1 else '')
+
+
 def graph_html(graph, index):
     nodes, edges = graph['nodes'], graph['edges']
     cells = {node['id']: node.get('position', {'column': i % 3, 'row': i // 3}) for i, node in enumerate(nodes)}
@@ -230,6 +237,10 @@ def graph_html(graph, index):
     width = max(x for x,y in positions.values()) + 330
     height = max(y for x,y in positions.values()) + 160
     rectangles = {key: (x,y,250,112) for key,(x,y) in positions.items()}
+    warnings = []
+    graph['layout_warnings'] = warnings
+    if width > 1100:
+        warnings.append({'code': 'wide-map', 'message': '宽图保留字级并在图内滚动；核对目标窗口，优先按职责重排或拆图。'})
     incoming = {node['id']: [i for i,e in enumerate(edges) if e['to']==node['id']] for node in nodes}
     outgoing = {node['id']: [i for i,e in enumerate(edges) if e['from']==node['id']] for node in nodes}
     kind = graph['kind']
@@ -241,8 +252,9 @@ def graph_html(graph, index):
              '<label>路径终点 <select data-route-target aria-label="选择路径终点"><option value="">请选择</option>' +
              ''.join('<option value="' + node['id'] + '">' + html.escape(node['label']) + '</option>' for node in nodes) +
              '</select></label><button type="button" data-route>显示路径</button></div>',
-             '<p class="map-hint search-summary" role="status">未筛选节点。</p>',
-             '<div class="map-scroll"><svg viewBox="0 0 ' + str(width) + ' ' + str(height) + '" role="group" aria-labelledby="' + title_id + '">',
+             '<div class="map-status"><p class="map-hint search-summary" role="status" tabindex="0">全图 · 尚未选择节点。</p><button type="button" data-show-detail disabled>查看节点详情</button></div><div class="map-body">',
+             '<p class="map-hint">宽图可在图内横向滚动；长名称的全文见节点详情或下方列表。</p>',
+             '<div class="map-scroll" tabindex="0" role="region" aria-label="' + html.escape(graph['title'], quote=True) + '，可横向滚动"><svg style="min-width:' + str(width) + 'px" viewBox="0 0 ' + str(width) + ' ' + str(height) + '" role="group" aria-labelledby="' + title_id + '">',
              '<defs><marker id="arrow-' + str(index) + '" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10Z" fill="currentColor"/></marker></defs>']
     occupied = list(rectangles.values())
     for group in graph.get('groups', []):
@@ -253,8 +265,8 @@ def graph_html(graph, index):
         if any(key not in group['members'] and intersects(bounds,rect) for key,rect in rectangles.items()):
             raise ValueError('分组边界包含非成员节点，调整布局或分组')
         occupied.append((x,y,right-x,26))
-        parts.append(f'<g class="map-group"><rect x="{x}" y="{y}" width="{right-x}" height="{bottom-y}" rx="12"/><text x="{x+14}" y="{y+22}">' + html.escape(group['label']) + '</text></g>')
-    label_boxes = []
+        parts.append(f'<g class="map-group"><title>' + html.escape(group['label']) + f'</title><rect x="{x}" y="{y}" width="{right-x}" height="{bottom-y}" rx="12"/><text x="{x+14}" y="{y+22}">' + html.escape(shortened(group['label'], (right-x-28)/14)) + '</text></g>')
+    label_boxes, routes = [], {}
     for i, edge in enumerate(edges):
         x1,y1 = positions[edge['from']]; x2,y2 = positions[edge['to']]
         out_port = 22 + 206*(outgoing[edge['from']].index(i)+1)/(len(outgoing[edge['from']])+1)
@@ -283,11 +295,22 @@ def graph_html(graph, index):
         if edge['from']==edge['to']:
             points=[(x1+250,y1+56),(x1+276,y1+56),(x1+276,y1-22),(x1+out_port,y1-22),(x1+out_port,y1)]
         route='M'+ 'L'.join(f'{x:.1f} {y:.1f}' for x,y in points)
+        if route in routes:
+            warnings.append({'code': 'overlapping-route', 'edge': i, 'other_edge': routes[route],
+                             'message': '多条关系使用同一路径；核对是否合并表达、重排或拆图。'})
+        routes[route] = i
+        crossed = [key for key,r in rectangles.items() if key not in (edge['from'], edge['to']) and any(
+            intersects((min(a[0],b[0]),min(a[1],b[1]),max(abs(a[0]-b[0]),1),max(abs(a[1]-b[1]),1)),r)
+            for a,b in zip(points,points[1:]))]
+        if crossed:
+            warnings.append({'code': 'edge-crosses-node', 'edge': i, 'nodes': crossed,
+                             'message': '连线穿过其他节点；调整位置或拆图后复核。'})
         category=edge.get('category','primary')
         uncertain=edge.get('basis','observed')!='observed'
         parts.append('<path class="edge ' + category + (' uncertain' if uncertain else '') + '" data-edge="' + str(i) + '" d="' + route + '" marker-end="url(#arrow-' + str(index) + ')"><title>' + html.escape(edge['label']) + '</title></path>')
-        label=edge.get('short_label',edge['label']) + (' · 推断/待核实' if uncertain else '')
-        lw=min(text_width(label,12)+16,250); lh=24
+        suffix = ' · 待核实' if uncertain else ''
+        label=shortened(edge.get('short_label',edge['label']), 16 - text_width(suffix, 1)) + suffix
+        lw=text_width(label,14)+8; lh=26
         segments=sorted(zip(points,points[1:]),key=lambda s:abs(s[0][0]-s[1][0])+abs(s[0][1]-s[1][1]),reverse=True)
         location=None
         for a,b in segments:
@@ -301,23 +324,29 @@ def graph_html(graph, index):
             if location:break
         if location:
             label_boxes.append(location); x,y,lw,lh=location
-            parts.append(f'<g class="edge-label" data-for-edge="{i}"><rect x="{x:.1f}" y="{y:.1f}" width="{lw:.1f}" height="{lh}" rx="4"/><text x="{x+lw/2:.1f}" y="{y+16:.1f}" text-anchor="middle">' + html.escape(label) + '</text></g>')
+            parts.append(f'<g class="edge-label" data-for-edge="{i}"><title>' + html.escape(edge['label']) + f'</title><rect x="{x:.1f}" y="{y:.1f}" width="{lw:.1f}" height="{lh}" rx="4"/><text x="{x+lw/2:.1f}" y="{y+18:.1f}" text-anchor="middle">' + html.escape(label) + '</text></g>')
+        else:
+            warnings.append({'code': 'label-not-placed', 'edge': i, 'message': '连线标签空间不足；全文仍在节点详情与关系列表，须核对关系是否可辨。'})
     role_names={'component':'组件','actor':'参与者','rule':'规则依据','template':'模板资源','core':'执行核心','data':'项目数据','helper':'辅助工具','process':'处理步骤','optional':'可选能力','result':'结果与审阅'}
     for node in nodes:
         x,y=positions[node['id']]; role=node.get('role','component'); refs=graph['sources'][node['id']]
         parts.append('<g class="node ' + role + '" role="button" tabindex="0" aria-label="' + html.escape(node['label'],quote=True) + '" data-node="' + node['id'] + f'"><rect x="{x}" y="{y}" width="250" height="112" rx="9"/><text class="node-role" x="{x+16}" y="{y+22}">' + role_names[role] + '</text>')
-        title_lines=wrapped(node['label'])
+        title_lines=wrapped(node['label'], 13)
         for j,line in enumerate(title_lines[:2]):
             if j==1 and len(title_lines)>2:
                 line=line[:-1]+'…'
             parts.append(f'<text class="node-title" x="{x+16}" y="{y+48+j*22}">' + html.escape(line) + '</text>')
         summary=str(node.get('summary',''))
         if summary:
-            parts.append(f'<text class="node-summary" x="{x+16}" y="{y+87}">' + html.escape(wrapped(summary,17)[0] + ('…' if len(wrapped(summary,17))>1 else '')) + '</text>')
+            parts.append(f'<text class="node-summary" x="{x+16}" y="{y+91}">' + html.escape(shortened(summary,15)) + '</text>')
         basis=node.get('basis','observed'); badge='来源 '+str(len(refs)) if basis=='observed' else {'inferred':'推断','unknown':'待核实'}[basis]
         parts.append(f'<text class="basis" x="{x+233}" y="{y+23}" text-anchor="end">' + badge + '</text></g>')
-    parts.append('</svg></div><p class="map-hint">图中短标签用于快速阅读；完整关系、条件和来源见节点详情或下方列表。</p><div class="node-detail" aria-live="polite"><p>选择节点查看完整说明、关系及来源。</p></div>')
+    parts.append('</svg></div><div class="detail-pane"><div class="node-detail" tabindex="-1"><p>选择节点查看完整说明、关系及来源。</p></div><button type="button" data-return-node disabled>返回所选节点</button></div></div><p class="map-hint">图中短标签用于快速阅读；完整关系、条件和来源见节点详情或下方列表。</p>')
+    if any(item['code'] == 'label-not-placed' for item in warnings):
+        parts.append('<p class="map-hint">部分连线标签未在图内展开；选择相关节点或展开下方列表查看完整关系。</p>')
     parts.append('<details><summary>全部节点、关系及来源</summary>')
+    for group in graph.get('groups', []):
+        parts.append('<p>分组：' + html.escape(group['label']) + '</p>')
     for node in nodes:
         parts.append('<h4>'+html.escape(node['label'])+'</h4><p>'+html.escape(node.get('summary',''))+'</p><p>'+html.escape(str(node.get('description','')))+'</p>')
         for ref in graph['sources'][node['id']]:
@@ -468,6 +497,9 @@ def main(argv=None):
     if output_raw.is_symlink() or not output.is_relative_to(root):
         raise ValueError('输出不能为符号链接或越界')
     result, graphs, manifest = render(root, args.source, output)
+    for index, graph in enumerate(graphs):
+        for warning in graph.get('layout_warnings', []):
+            print('GUIDE_LAYOUT_REVIEW ' + packed({'view': index, **warning}), file=sys.stderr)
     if args.action == 'inspect':
         if not args.node or not 0 <= args.view < len(graphs):
             raise ValueError('inspect需要合法view和node')
