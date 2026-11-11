@@ -1,8 +1,8 @@
 <!-- guide-meta
 {
   "date": "2026-11-11",
-  "version": "2.2.1-dev.6",
-  "identity": "发布适配源 SHA256 da7d5374ac111729c9068b772e308c7bdbb4a7198b5a4792cc348fa5bc642765",
+  "version": "2.2.1-dev.7",
+  "identity": "发布适配源 SHA256 751b20d0bec11a7ddf2009e8b859e028ca6c87d986c5bfdc02529cd74864cc89",
   "scope": "ai-sdlc项目概览参考快照；保留概览与三图，开发任务、实时状态及私有证据不随包。图来源改用包内同概念的规则或实现，不表示本机安装或远端发布已完成。现行规则以包内原文为准。",
   "title": "ai-sdlc · 项目概览与工程全景",
   "sources": [

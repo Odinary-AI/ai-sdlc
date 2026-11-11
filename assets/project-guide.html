@@ -6,8 +6,18 @@
 *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:17px/1.75 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
 main{max-width:1120px;margin:auto;padding:42px 28px 80px}header{border-bottom:1px solid var(--line);padding-bottom:22px}h1{font-size:36px;line-height:1.3;margin:0 0 12px}h2{font-size:26px;line-height:1.4}h3{font-size:20px}h4{font-size:17px}p{max-width:82ch}a{color:var(--accent);text-underline-offset:3px;overflow-wrap:anywhere}button,input,select{font:inherit}button{padding:6px 14px;background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:4px;cursor:pointer}button[aria-pressed=true]{background:var(--accent);color:#fff}input,select{border:1px solid var(--line);border-radius:4px;padding:6px 10px;max-width:100%}
 :focus-visible{outline:3px solid var(--focus);outline-offset:3px}nav{display:flex;gap:10px 18px;flex-wrap:wrap;padding:18px 0;border-bottom:1px solid var(--line)}section{padding:16px 0;scroll-margin-top:18px}details{border-top:1px solid var(--line);padding:12px 0}summary{cursor:pointer;font-weight:600}pre{overflow:auto;background:#edf0e9;padding:16px}table{border-collapse:collapse;display:block;overflow:auto}th,td{padding:10px;border:1px solid var(--line);text-align:left}.snapshot,.muted,.source,.map-hint{color:var(--muted);font-size:15px}.note,.node-detail{background:#eef2ec;border-left:3px solid var(--accent);padding:12px 18px}.pairs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 24px}.buttons,.map-controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.panel[hidden]{display:none}.panel{margin-top:16px}.map{margin:24px 0 36px}.map figcaption{font-size:21px;font-weight:650}.map{border-top:1px solid var(--line);padding-top:18px}.map-controls{background:#edf1eb;padding:12px;border-radius:6px}.map-controls label{font-size:14px}.map-hint{font-size:14px}.map-scroll{background:#fbfcf9;border:1px solid #dce2d8;border-radius:10px;margin:10px 0;padding:12px}.map-scroll{overflow-x:auto;padding:12px 0}.map svg{display:block;width:100%;min-width:690px}.map-group rect{fill:#f0f3ed;stroke:#c8d2c5;stroke-width:1}.map-group text{font-size:14px;font-weight:600;fill:#52616a}.edge{fill:none;stroke:#577569;stroke-width:1.8}.edge.conditional,.edge.optional,.edge.feedback{stroke-dasharray:7 5;stroke:#859388}.edge.reference{stroke:#78909b;stroke-dasharray:2 4}.edge.uncertain{stroke-dasharray:3 5}.edge-label rect{fill:#fbfcf9;stroke:#dce2d8;stroke-width:.5}.edge-label text{font-size:14px;fill:#46574e}.node rect{fill:#fff;stroke:#aebeb1;stroke-width:1.25}.node.core rect{fill:#e3f0ea;stroke:#326f5f;stroke-width:1.8}.node.data rect{fill:#edf2f6;stroke:#829cae}.node.optional rect{stroke-dasharray:5 3;fill:#f9faf7}.node.actor rect,.node.result rect{fill:#f2f4ed}.node text{fill:var(--ink)}.node .node-role{font-size:14px;fill:#617065}.node .node-title{font-size:16px;font-weight:650}.node .node-summary{font-size:14px;fill:#52616a}.node .basis{font-size:12px;fill:#617065}.node{cursor:pointer}.node.selected rect,.node:focus-visible rect{stroke:var(--focus);stroke-width:3}.node:focus-visible{outline:none}.edge.reached{stroke:var(--accent);stroke-width:3}.dim{opacity:.24}.node-detail h3{margin:0 0 8px}.node-detail p{margin:6px 0}.node-detail ul{margin:6px 0}.node-detail code{font-size:13px;overflow-wrap:anywhere}.architecture-map{margin:22px 0;overflow-x:auto}.architecture-map svg{width:100%;min-width:650px}.architecture-map text{font:16px system-ui}.arch-node rect,.arch-mode rect{fill:#fff;stroke:var(--line)}.arch-heading,.arch-package-title{font-weight:650}.arch-small{font-size:13px!important}.arch-guidance{stroke-dasharray:6 5}.diagram-key{font-size:14px;color:var(--muted)}footer{margin-top:36px;border-top:1px solid var(--line);padding-top:16px}
-.map-body{display:block}.detail-pane{align-self:start}.detail-pane>button{margin-top:10px}.map-status{position:sticky;top:0;z-index:2;display:flex;gap:12px;align-items:center;justify-content:space-between;background:var(--paper);padding:8px 0;border-bottom:1px solid var(--line)}.map-status p{margin:0;max-height:4.5em;overflow:auto}.map-status button{flex-shrink:0}button:disabled{cursor:default;opacity:.55}.node-detail{scroll-margin-top:90px}.source-identity code{display:block}.task-entry{display:flex;flex-wrap:wrap;gap:12px 24px;margin:20px 0}.node{scroll-margin-block:100px}.map-scroll{min-width:0}.map details,.node-detail,.map-status p{overflow-wrap:anywhere}.map-controls label{min-width:0;max-width:100%}
-@media(min-width:1600px){.map{width:1440px;margin-left:calc((100% - 1440px)/2)}.map-body{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:24px}.detail-pane{position:sticky;top:90px;max-height:calc(100vh - 110px);overflow:auto;padding:4px}.map-scroll{margin-top:0}.node-detail{padding:12px}.node-detail li{font-size:15px}.node-detail ul{padding-left:20px}}
+.map-body{display:block}.detail-pane{align-self:start}.detail-pane>button{margin-top:10px}.map-status{display:flex;gap:12px;align-items:center;justify-content:space-between;background:var(--paper);padding:8px 0;border-bottom:1px solid var(--line)}.map-status p{margin:0;max-height:4.5em;overflow:auto}.map-status button{flex-shrink:0}button:disabled{cursor:default;opacity:.55}.node-detail{scroll-margin-top:90px}.source-identity code{display:block}.task-entry{display:flex;flex-wrap:wrap;gap:12px 24px;margin:20px 0}.node{scroll-margin-block:100px}.map-scroll{min-width:0}.map details,.node-detail,.map-status p{overflow-wrap:anywhere}.map-controls label{min-width:0;max-width:100%}
+.map-controls select{width:24ch;max-width:100%}
+.node-detail{line-height:1.6;min-width:0}
+.node-detail h3{font-size:18px;line-height:1.4}
+.node-detail h4{font-size:15px;margin:16px 0 4px}
+.node-detail p{max-width:42em;white-space:pre-line}
+.node-detail details{padding:6px 0}
+.node-detail .node-relations{list-style:none;padding:0}
+.node-relations li{border-top:1px solid var(--line);padding:8px 0}
+.node-relations strong{margin-right:8px}
+.node-relations p{margin:2px 0}
+@media(min-width:1600px){.map{width:1440px;margin-left:calc((100% - 1440px)/2)}.map-body{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:24px}.detail-pane{position:sticky;top:18px;max-height:calc(100vh - 36px);overflow:auto;padding:4px}.map-scroll{margin-top:0}.node-detail{padding:12px}.node-detail li{font-size:15px}.node-detail ul{padding-left:20px}}
 @media print{.map-status{position:static}.map-body{display:block}.detail-pane{position:static;max-height:none;overflow:visible}.map{width:auto;margin-left:0}}
 @media(max-width:700px){main{padding:24px 16px 60px}.pairs{grid-template-columns:1fr}h1{font-size:30px}}@media print{button,input{display:none}main{padding:0;max-width:none}.dim{opacity:1}.node-detail{break-inside:avoid}a{color:inherit}}
 </style></head>
@@ -25,16 +35,46 @@ for(const figure of document.querySelectorAll('[data-map]')){
   function element(tag,text){const item=document.createElement(tag);item.textContent=text;return item;}
   function reach(seed,mode){const seen=new Set([seed]),queue=[seed];while(queue.length){const current=queue.shift();for(const edge of graph.edges){const a=mode==='upstream'?edge.to:edge.from,b=mode==='upstream'?edge.from:edge.to;if(a===current&&!seen.has(b)){seen.add(b);queue.push(b);}}}return seen;}
   function route(seed,end){const queue=[{node:seed,nodes:[seed],edges:[]}],seen=new Set([seed]);while(queue.length){const item=queue.shift();if(item.node===end)return item;for(let i=0;i<graph.edges.length;i++){const edge=graph.edges[i];if(edge.from===item.node&&!seen.has(edge.to)){seen.add(edge.to);queue.push({node:edge.to,nodes:[...item.nodes,edge.to],edges:[...item.edges,i]});}}}return null;}
+  function disclosure(label, value){
+    const item=element('details','');
+    item.append(element('summary',label),element('p',value));
+    return item;
+  }
+  function detailText(label, value){
+    return [...value].length>160?disclosure(label,value):element('p',value);
+  }
   function renderDetail(){
     if(!state.selected){detail.replaceChildren(element('p','选择节点查看完整说明、关系及来源。'));return;}
     const node=nodeById.get(state.selected);
-    detail.replaceChildren(element('h3',node.label),element('p',basisNames[node.basis||'observed']+' · '+(node.description||'没有补充说明')));
-    if(node.summary)detail.append(element('p',node.summary));
-    const list=element('ul','');for(const edge of graph.edges.filter(edge=>edge.from===node.id||edge.to===node.id)){list.append(element('li',nodeById.get(edge.from).label+' → '+nodeById.get(edge.to).label+'：'+edge.label+'（'+basisNames[edge.basis||'observed']+'）'));}detail.append(list);
+    const heading=displayName(node.id), basis=element('p',basisNames[node.basis||'observed']);
+    basis.className='muted';
+    detail.replaceChildren(element('h3',heading),basis);
+    if(heading!==node.label)detail.append(disclosure('完整节点名称',node.label));
+    if(node.summary&&node.summary!==node.label)detail.append(detailText('完整摘要',node.summary));
+    if(node.description&&node.description!==node.label&&node.description!==node.summary){
+      detail.append(detailText('完整说明',node.description));
+    }
+    const related=graph.edges.filter(edge=>edge.from===node.id||edge.to===node.id);
+    if(related.length){
+      detail.append(element('h4','关系'));
+      const list=element('ul','');
+      list.className='node-relations';
+      for(const edge of related){
+        const outgoing=edge.from===node.id, other=outgoing?edge.to:edge.from;
+        const name=displayName(other), label=outgoing?'指向 '+name:'来自 '+name;
+        const item=element('li',''), certainty=element('span',basisNames[edge.basis||'observed']);
+        certainty.className='muted';
+        item.append(element('strong',label),certainty,detailText('完整关系说明',edge.label));
+        if(name!==nodeById.get(other).label)item.append(disclosure('完整节点名称',nodeById.get(other).label));
+        list.append(item);
+      }
+      detail.append(list);
+    }
+    detail.append(element('h4','来源'));
     const refs=graph.sources[node.id];
     if(!refs.length){detail.append(element('p','未提供可定位来源；标记由源内容作者填写。'));return;}
     const identities=element('details','');identities.className='source-identity';identities.append(element('summary','来源与内容身份'));
-    for(const ref of refs){const p=element('p','来源：'),a=element('a',ref.path);a.href=ref.href;p.append(a);if(ref.line)p.append(element('span',' · 行 '+ref.line+'–'+ref.end_line));detail.append(p);identities.append(element('p',ref.path),element('code',ref.sha256));}
+    for(const ref of refs){const p=element('p',''),a=element('a',ref.path);a.href=ref.href;p.append(a);if(ref.line)p.append(element('span',' · 行 '+ref.line+'–'+ref.end_line));detail.append(p);identities.append(element('p',ref.path),element('code',ref.sha256));}
     identities.append(element('p','来源定位与内容身份已核对；关系含义和工程验收仍需相应依据。'));detail.append(identities);
   }
   function displayName(id){const label=nodeById.get(id).label;return [...label].length>32?[...label].slice(0,31).join('')+'…':label;}

@@ -3,7 +3,7 @@ name: ai-sdlc
 description: Explicitly invoked project engineering mechanism for individual developers and one-person companies. Adopt a project, execute or resume an authorized task, inspect and clean legacy code and project files, walk through architecture and module contracts, carry out integrated project governance, and check evidence-backed delivery. Invoke only when the user explicitly requests this skill; ordinary discussion does not authorize adoption.
 license: MIT
 metadata:
-  version: "2.2.1-dev.6"
+  version: "2.2.1-dev.7"
 ---
 
 # AI工程机制

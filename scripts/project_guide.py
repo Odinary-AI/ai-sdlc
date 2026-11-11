@@ -252,8 +252,9 @@ def graph_html(graph, index):
              '<label>路径终点 <select data-route-target aria-label="选择路径终点"><option value="">请选择</option>' +
              ''.join('<option value="' + node['id'] + '">' + html.escape(node['label']) + '</option>' for node in nodes) +
              '</select></label><button type="button" data-route>显示路径</button></div>',
-             '<div class="map-status"><p class="map-hint search-summary" role="status" tabindex="0">全图 · 尚未选择节点。</p><button type="button" data-show-detail disabled>查看节点详情</button></div><div class="map-body">',
+             '<div class="map-status"><p class="map-hint search-summary" role="status" tabindex="0">全图 · 尚未选择节点。</p><button type="button" data-show-detail disabled>查看节点详情</button></div>',
              '<p class="map-hint">宽图可在图内横向滚动；长名称的全文见节点详情或下方列表。</p>',
+             '<div class="map-body">',
              '<div class="map-scroll" tabindex="0" role="region" aria-label="' + html.escape(graph['title'], quote=True) + '，可横向滚动"><svg style="min-width:' + str(width) + 'px" viewBox="0 0 ' + str(width) + ' ' + str(height) + '" role="group" aria-labelledby="' + title_id + '">',
              '<defs><marker id="arrow-' + str(index) + '" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10Z" fill="currentColor"/></marker></defs>']
     occupied = list(rectangles.values())
