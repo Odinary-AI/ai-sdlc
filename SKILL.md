@@ -1,9 +1,9 @@
 ---
 name: ai-sdlc
-description: Explicitly invoked project engineering mechanism for individual developers and one-person companies. Adopt a project, execute or resume an authorized task, inspect and clean legacy code and project files, walk through architecture and module contracts, carry out integrated project governance, and check evidence-backed delivery. Invoke only when the user explicitly requests this skill; ordinary discussion does not authorize adoption.
+description: Explicitly invoked project engineering mechanism for individual developers and one-person companies. Adopt a project, execute or resume an authorized task, review or clean a code diff, govern legacy code and project files, walk through architecture and module contracts, carry out integrated project governance, and check evidence-backed delivery. Invoke only when the user explicitly requests this skill; ordinary discussion does not authorize adoption.
 license: MIT
 metadata:
-  version: "2.2.1-dev.7"
+  version: "2.2.1-dev.8"
 ---
 
 # AI工程机制
@@ -17,6 +17,7 @@ metadata:
 ## 选择当前工作
 
 - **接入项目**：读取 [接入说明](references/adoption.md)及[默认目录规则](references/project-layout.md)，检查现有规则和文件，建立缺失的必要内容及项目映射。
+- **局部代码清理**：用户要求检查或清理本次改动、指定文件或模块中的重复实现、废弃残留、不必要复杂度或效率问题时，使用[局部代码清理入口](references/code-health.md#局部代码清理)。仅检查时只读。
 - **遗留与废弃物治理**：用户要求治理废弃代码、死代码或孤立/多余文件时，从[治理入口](references/maintenance.md#遗留与废弃物治理入口)进入，按有界范围调查、处置和验证；覆盖重构及其他来源，复用代码健康和目录清理方法，保留检查与清理的授权边界。
 - **目录检查与清理**：用户要求检查目录、多余文件或清理项目时，读取[目录检查与清理入口](references/project-layout.md#目录检查与清理入口)，主动调查内容与归属，判断归类/删除/保留/待核实，按授权处置、同步有效消费者并核对完成范围；只读请求不执行移动或删除，不默认升级为完整治理。
 - **执行或恢复任务**：从[项目接手与任务恢复](references/lifecycle.md#项目接手与任务恢复)进入，按其中路由沿项目的文档或脚本模式继续；新需求、范围变化或理解不足时按[需求与验收澄清](references/lifecycle.md#需求与验收澄清)整理用户结果与验收草案；在关键实现前核对反馈是否够用，反馈不足、原因不明或反复修复时按其中的[反馈与诊断](references/lifecycle.md#反馈与诊断)推进。
