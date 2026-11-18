@@ -17,7 +17,8 @@ import uuid
 import fcntl
 import importlib.util
 
-VERSION = '2.2.1-dev.8'
+VERSION = '2.3.0-dev.1'
+STRUCTURED_TASK_VERSIONS = (2, 3)
 TASK_STATE_LABELS = {'not_started': '未开始', 'in_progress': '进行中', 'blocked': '阻塞',
                      'interrupted': '已中断', 'completed': '已完成', 'cancelled': '已取消'}
 PACKAGE = Path(__file__).resolve().parents[1]
@@ -35,7 +36,7 @@ START, END = '<!-- harness:status:start -->', '<!-- harness:status:end -->'
 INPUT_CHANGE_LABELS = {
     'file': '文件', 'file_mode': '执行权限', 'directory': '目录', 'environment': '环境',
     'check': '检查定义', 'contract': '任务标准', 'confirmation': '授权来源',
-    'runner': '执行器', 'scan': '扫描覆盖', 'scan_runner': '扫描校验器', 'fingerprint': '输入指纹',
+    'runner': '执行器', 'scan': '扫描覆盖', 'packaged_adapter': '随包测试适配器', 'scan_runner': '扫描校验器', 'fingerprint': '输入指纹',
 }
 
 class HarnessError(Exception):
@@ -143,6 +144,16 @@ def validate_config(root, c, check_ids=None):
         require(key in c['authorities'], f'缺少职责: {key}')
         safe(root, c['authorities'][key])
     status = safe(root, c['authorities']['status']).resolve()
+    internal = [safe(root, f'.harness/{name}').resolve() for name in
+                ('project.json', 'lock', 'adoption.json', 'evidence', 'close', 'actions',
+                 'codex', 'migrations', 'reconciliations', 'reports')]
+    require(not any(status == path or status.is_relative_to(path) or
+                    (status.is_file() and path.is_file() and status.samefile(path))
+                    for path in internal),
+            'status 与执行器内部存储冲突；请映射独立状态文件')
+    tasks = safe(root, 'docs/tasks').resolve()
+    require(not (status.parent == tasks and status.suffix == '.md' and status.stem.startswith('TASK-')),
+            'status 不能指向任务记录；请映射独立状态文件')
     for role in ('requirements', 'validation', 'agent_policy'):
         policy = safe(root, c['authorities'][role]).resolve()
         existing = status.exists() and policy.exists()
@@ -199,24 +210,37 @@ def local_markdown_target(source, target):
     except markdown_support.MarkdownError as exc:
         raise HarnessError(str(exc)) from exc
 
+def python_script(argv):
+    rest = list(argv[1:])
+    while rest and rest[0] in ('-B', '-u', '-I', '-E', '-s', '-S', '-O', '-OO'):
+        rest.pop(0)
+    if rest and rest[0] == '--':
+        rest.pop(0)
+    if rest and not rest[0].startswith('-'):
+        return Path(rest[0])
+
+
 def direct_check_entries(root, argv):
     """Recognize explicit executables and a bounded Python script syntax only."""
-    entries = []
     first = Path(argv[0])
-    python = re.fullmatch(r'python(?:\d+(?:\.\d+)*)?', first.name)
-    if not python and '/' in argv[0] and (not first.is_absolute() or first.is_relative_to(root)):
-        entries.append(first)
-    if python:
-        rest = list(argv[1:])
-        while rest and rest[0] in ('-B', '-u', '-I', '-E', '-s', '-S', '-O', '-OO'):
-            rest.pop(0)
-        if rest and rest[0] == '--':
-            rest.pop(0)
-        if rest and rest[0] != '-' and not rest[0].startswith('-'):
-            candidate = Path(rest[0])
-            if not candidate.is_absolute() or candidate.is_relative_to(root):
-                entries.append(candidate)
-    return list(dict.fromkeys(str(p.relative_to(root) if p.is_absolute() else p) for p in entries))
+    entry = (python_script(argv) if re.fullmatch(r'python(?:\d+(?:\.\d+)*)?', first.name)
+             else first if '/' in argv[0] else None)
+    if entry is None:
+        return []
+    if not entry.is_absolute():
+        return [str(entry)]
+    return [str(entry.relative_to(root))] if entry.is_relative_to(root) else []
+
+
+def packaged_adapter_identity(root, argv):
+    if not re.fullmatch(r'python(?:\d+(?:\.\d+)*)?', Path(argv[0]).name):
+        return None
+    entry = python_script(argv)
+    if entry is not None and entry.is_absolute() and not entry.is_relative_to(root):
+        adapter = PACKAGE / 'scripts/unittest_report.py'
+        if entry.resolve() == adapter.resolve():
+            require(adapter.is_file(), '随包 unittest_report.py 缺失')
+            return file_digest(adapter)
 
 
 def entry_input_gaps(root, cid, check):
@@ -247,7 +271,8 @@ def task_write_targets(root, tid):
     task = task_path(root, tid)
     receipts = safe(root, f'.harness/close/{tid}')
     targets = {}
-    for path in (task, receipts):
+    evidence = safe(root, f'.harness/evidence/{tid}')
+    for path in (task, receipts, evidence):
         resolved = path.resolve()
         for ancestor in (resolved, *resolved.parents):
             if not ancestor.is_relative_to(root):
@@ -420,7 +445,7 @@ def read_task(root, tid):
     except ValueError as exc:
         raise HarnessError('任务数据块损坏') from exc
     require(isinstance(t, dict), '任务数据块必须是 JSON 对象')
-    require(t.get('schema_version') in (1, 2) and t.get('id') == tid, '任务版本或 ID 不一致')
+    require(t.get('schema_version') in (1, *STRUCTURED_TASK_VERSIONS) and t.get('id') == tid, '任务版本或 ID 不一致')
     return t, body
 
 def v2_defaults(t):
@@ -460,7 +485,7 @@ def human_item_gaps(root, t, required=False):
                     gaps.append(f'待人事项缺问题或材料: {path_label} 应为非空路径字符串')
                     continue
                 try:
-                    materials[path] = material_digest(root, path, t['id'])
+                    materials[path] = material_digest(root, path, t['id'], source_kind(root, path, t['id']))
                 except (HarnessError, OSError) as exc:
                     gaps.append(f'{path_label}: {exc}')
         acceptance_id = item.get('acceptance_id')
@@ -478,9 +503,7 @@ def record_gaps(root, t):
     def check(condition, message):
         if not condition: gaps.append(message)
     def material(rel):
-        p = safe(root, rel)
-        require(p.is_file() and bool(p.read_text().strip()), f'材料缺失或为空: {rel}')
-        materials[rel] = digest(p.read_bytes())
+        materials[rel] = material_digest(root, rel, t['id'], source_kind(root, rel, t['id']))
     try:
         purpose = t['purpose']
         check(isinstance(purpose.get('user_outcome', t['goal']), str) and bool(purpose.get('user_outcome', t['goal']).strip()), '缺少用户结果')
@@ -549,7 +572,7 @@ def record_gaps(root, t):
 def migrate_task(root, c, tid, apply=False):
     with lock(root) if apply else contextlib.nullcontext():
         t, body = read_task(root, tid)
-        if t['schema_version'] == 2: return {'applied': False, 'reason': 'already_v2'}
+        if t['schema_version'] in STRUCTURED_TASK_VERSIONS: return {'applied': False, 'reason': f'already_v{t["schema_version"]}'}
         original = task_path(root, tid).read_bytes()
         candidate = v2_defaults(dict(t));candidate['schema_version'] = 2
         result = {'applied': False, 'candidate': candidate, 'gaps': record_gaps(root, candidate)[0]}
@@ -628,10 +651,10 @@ def update_task(root, c, tid, candidate):
     require(isinstance(candidate, dict), '任务更新快照必须是 JSON 对象')
     with lock(root):
         t, body = read_task(root, tid)
-        require(t['schema_version'] == 2, '旧任务先 migrate-task')
+        require(t['schema_version'] in STRUCTURED_TASK_VERSIONS, '旧任务先 migrate-task')
         require(candidate.get('updated_at') == t['updated_at'],
                 f'任务已变化，请重新读取；运行 resume {tid} 取得当前 task，基于它重新应用本次修改后 update，不只替换 updated_at')
-        for key in ('id','schema_version','state','created_at','migration','review_source','review_sha256','review_kind','review_record_sha256'):
+        for key in ('id','schema_version','state','created_at','migration','review_source','review_sha256','review_kind','review_record_sha256','review_inputs_sha256'):
             guidance = (f'保留当前 state 可更新内容（包括 blocked）；需继续执行验证时，核对现场后运行 resume {tid} --activate'
                         if key == 'state' else '重新读取当前 task，保留该管理字段，仅应用本次内容修改')
             require(candidate.get(key) == t.get(key), f'不能通过 update 改变 {key}；{guidance}')
@@ -656,7 +679,7 @@ def contract(t):
 
 def review_record(t):
     managed = {'state', 'updated_at', 'next_action', 'next_reason',
-               'review_source', 'review_sha256', 'review_kind', 'review_record_sha256'}
+               'review_source', 'review_sha256', 'review_kind', 'review_record_sha256', 'review_inputs_sha256'}
     return {k: v for k, v in t.items() if k not in managed}
 
 def source_kind(root, rel, tid):
@@ -700,7 +723,7 @@ def reconcile_run(root, c, tid, runid, outcome, source, damaged=False):
     require(outcome in ('finished', 'stopped'), '未知结局不能解除在途缺口')
     with lock(root):
         t, _ = read_task(root, tid)
-        require(t['schema_version'] == 2, '旧任务先 migrate-task')
+        require(t['schema_version'] in STRUCTURED_TASK_VERSIONS, '旧任务先 migrate-task')
         directory = safe(root, f'.harness/evidence/{tid}/{runid}')
         p = safe(root, str((directory/'summary.json').relative_to(root)))
         if damaged:
@@ -750,9 +773,9 @@ def resolved_run(root, tid, runid, summary_path):
     return r
 
 def validate_task(t, c):
-    require(t.get('schema_version') in (1,2), '未知任务版本')
+    require(t.get('schema_version') in (1, *STRUCTURED_TASK_VERSIONS), '未知任务版本')
     require('scan_required' not in t or type(t['scan_required']) is bool, 'scan_required 须为布尔值')
-    if t['schema_version'] == 2:
+    if t['schema_version'] in STRUCTURED_TASK_VERSIONS:
         require(all(isinstance(t.get(k), list) and all(isinstance(x, dict) for x in t[k]) for k in ('decisions','changes','followups','human_items','risk_routes')), 'v2记录列表无效')
         require(isinstance(t.get('purpose'), dict) and isinstance(t.get('document_sync'), dict), 'v2目标与同步字段缺失')
     for key in ('goal', 'scope', 'authorization', 'next_action'):
@@ -771,6 +794,31 @@ def validate_task(t, c):
         require(all(isinstance(x, str) for x in checks) and len(set(checks)) == len(checks), f'acceptance[{i}].checks 须为不重复的检查ID数组')
         require(all(x in c['checks'] for x in checks), '验收标准引用未知检查')
         require(type(ac.get('human_required', False)) is bool, 'human_required 必须为布尔值')
+        if 'artifact_paths' in ac:
+            paths = ac['artifact_paths']
+            require(t['schema_version'] == 3 and ac.get('human_required') is True,
+                    f'{ac["id"]}: artifact_paths 仅用于 v3 必需人工验收项')
+            require(isinstance(paths, list) and paths and all(isinstance(p, str) and p.strip() for p in paths)
+                    and len(set(paths)) == len(paths), f'{ac["id"]}: artifact_paths 须为非空、不重复的项目内文件路径')
+    if t['schema_version'] == 3:
+        require(any('artifact_paths' in ac for ac in acs), 'v3 需要至少一项产物绑定验收')
+
+
+def artifact_snapshot(root, c, tid, paths):
+    files, identities = {}, set()
+    status = safe(root, c['authorities']['status'])
+    targets = task_write_targets(root, tid)
+    for rel in paths:
+        path = safe(root, rel)
+        require(path.is_file(), f'验收产物缺失或非文件: {rel}')
+        require(not status.exists() or not path.samefile(status), f'状态摘要不能作为验收产物: {rel}')
+        reject_write_target(path, targets)
+        stat = path.stat()
+        identity = (stat.st_dev, stat.st_ino)
+        require(identity not in identities, f'验收产物路径指向重复文件: {rel}')
+        identities.add(identity)
+        files[rel] = file_digest(path)
+    return files
 
 def protect_task_aliases(root, c, t):
     # An atomic replacement would detach a selected hard link, making a retry
@@ -810,10 +858,14 @@ def sync_status(root, c, tid):
 
 def render_status(root, c, t):
     sp = safe(root, c['authorities']['status'])
+    task = task_path(root, t['id'])
+    require(sp.resolve() != task.resolve() and
+            not (sp.is_file() and task.is_file() and sp.samefile(task)),
+            'status 与当前任务记录冲突；请映射独立状态文件')
     prior = sp.read_text() if sp.exists() else '# 当前工作入口\n'
     rel = os.path.relpath(task_path(root, t['id']), sp.parent)
     section = f'{START}\n当前任务：[{t["id"]}]({rel})\n\n目标：{t["goal"]}\n\n任务执行状态：{TASK_STATE_LABELS.get(t["state"], t["state"])}\n\n下一动作：{t["next_action"]}\n\n详细验收、验证和人工验收以任务记录为准。\n{END}'
-    if t.get('schema_version') == 2:
+    if t.get('schema_version') in STRUCTURED_TASK_VERSIONS:
         snapshot = human_summary(t, assess(root, c, t))
         extra = [f'更新于：{t["updated_at"]}']
         if snapshot['user_outcome'] != t['goal']:
@@ -834,8 +886,9 @@ def begin(root, c, spec):
     require(isinstance(spec, dict), '任务规格必须是 JSON 对象')
     t = dict(spec)
     identifier(t.get('id'), 'id')
-    require(spec.get('schema_version', 2) == 2, '新建任务使用 schema_version=2；旧任务显式迁移')
-    t.update(schema_version=2, state='in_progress', created_at=now(), human_acceptance={})
+    version = spec.get('schema_version', 2)
+    require(version in STRUCTURED_TASK_VERSIONS, '新建任务使用 schema_version=2 或 3；旧任务显式迁移')
+    t.update(schema_version=version, state='in_progress', created_at=now(), human_acceptance={})
     v2_defaults(t)
     common = set(c.get('gates', {}).get('task', []))
     if common:
@@ -952,6 +1005,9 @@ def fingerprints(root, c, t, cid):
             'contract': digest(contract(t)), 'confirmation': digest(c.get('confirmation_source')),
             'runner': digest({'harness': file_digest(Path(__file__)),
                               'markdown_support': file_digest(Path(markdown_support.__file__))})}
+    adapter = packaged_adapter_identity(root, chk['argv'])
+    if adapter is not None:
+        result['packaged_adapter'] = adapter
     scan = scan_coverage.evaluate(root, task_path(root, t['id']))
     if scan['present']:
         result['scan'] = scan['fingerprint']
@@ -1049,21 +1105,23 @@ def execute_process(root, argv, env, timeout, logpath, rec, on_started):
 
 def verify(root, c, tid, cid):
     identifier(cid)
-    t, _ = read_task(root, tid)
-    validate_task(t, c)
-    require(t['schema_version'] == 2, '旧任务继续执行前须 migrate-task')
-    require(t['state'] == 'in_progress',
-            f'任务须为进行中；暂停或结束后先显式恢复并核对范围；核对现场后运行 resume {tid} --activate，再执行 verify')
-    require(cid in {x for ac in t['acceptance'] for x in ac['checks']}, '检查不在当前任务验收范围')
-    chk = c['checks'][cid]
-    initial = fingerprints(root, c, t, cid)
-    runid = dt.datetime.now(dt.timezone.utc).strftime('RUN-%Y%m%dT%H%M%S%f-') + uuid.uuid4().hex[:8]
-    run = f'.harness/evidence/{tid}/{runid}'
-    rec = {'schema_version': 2, 'task_id': tid, 'run_id': runid, 'check_id': cid,
-           'started_at': now(), 'finished_at': None, 'argv': chk['argv'], 'cwd': str(root),
-           'overall_status': 'running', 'verification_status': 'unverified', 'exit_code': None,
-           'inputs': initial, 'validity': 'indeterminate', 'counts': None, 'reason': '', 'pid': os.getpid()}
     with lock(root):
+        t, _ = read_task(root, tid)
+        if c is None:
+            c = config(root, task_check_ids(t))
+        validate_task(t, c)
+        require(t['schema_version'] in STRUCTURED_TASK_VERSIONS, '旧任务继续执行前须 migrate-task')
+        require(t['state'] == 'in_progress',
+                f'任务须为进行中；暂停或结束后先显式恢复并核对范围；核对现场后运行 resume {tid} --activate，再执行 verify')
+        require(cid in {x for ac in t['acceptance'] for x in ac['checks']}, '检查不在当前任务验收范围')
+        chk = c['checks'][cid]
+        initial = fingerprints(root, c, t, cid)
+        runid = dt.datetime.now(dt.timezone.utc).strftime('RUN-%Y%m%dT%H%M%S%f-') + uuid.uuid4().hex[:8]
+        run = f'.harness/evidence/{tid}/{runid}'
+        rec = {'schema_version': 2, 'task_id': tid, 'run_id': runid, 'check_id': cid,
+               'started_at': now(), 'finished_at': None, 'argv': chk['argv'], 'cwd': str(root),
+               'overall_status': 'running', 'verification_status': 'unverified', 'exit_code': None,
+               'inputs': initial, 'validity': 'indeterminate', 'counts': None, 'reason': '', 'pid': os.getpid()}
         safe(root, run).mkdir(parents=True, exist_ok=False)
         seal(root, run, rec)
     env = os.environ.copy()
@@ -1122,6 +1180,10 @@ def gate_inputs(root, c, ids):
         for member in members:
             files[str(member.relative_to(root))] = {'sha256': file_digest(member),
                                                    'mode': member.stat().st_mode & 0o111}
+    for cid in ids:
+        adapter = packaged_adapter_identity(root, c['checks'][cid]['argv'])
+        if adapter is not None:
+            files[f'@packaged_adapter/{cid}'] = {'sha256': adapter}
     return paths, files
 
 def gate(root, stage, source='worktree', ref=None):
@@ -1242,7 +1304,7 @@ def run_after(root, c, tid, checks, argv, timeout=300):
     require(isinstance(timeout, (int, float)) and 0 < timeout <= 86400, '动作 timeout 无效')
     t, _ = read_task(root, tid)
     validate_task(t, c)
-    require(t['schema_version'] == 2, '旧任务继续执行前须 migrate-task')
+    require(t['schema_version'] in STRUCTURED_TASK_VERSIONS, '旧任务继续执行前须 migrate-task')
     require(t['state'] == 'in_progress', '任务须为进行中；先核对现场再恢复')
     for cid in checks:
         identifier(cid)
@@ -1270,9 +1332,7 @@ def run_after(root, c, tid, checks, argv, timeout=300):
     try:
         for cid in checks:
             # Reload definitions and task before each check; never silently broaden selection.
-            current, _ = read_task(root, tid)
-            current_c = config(root, task_check_ids(current))
-            run = verify(root, current_c, tid, cid)
+            run = verify(root, None, tid, cid)
             rec['checks'].append({'check_id': cid, 'run': run['run']})
             save()
             require(run['verification_status'] == 'verified', f'{cid}: 本次检查失败或未知；依赖动作未启动')
@@ -1320,7 +1380,7 @@ def fingerprint_changes(before, after):
                         'file' if group == 'files' else 'file_mode' if group == 'file_modes' else 'environment')
                 changes.append({'kind': kind, 'name': name,
                                 'change': 'added' if name not in old else 'removed' if name not in new else 'modified'})
-    for name in ('check', 'contract', 'confirmation', 'runner', 'scan', 'scan_runner'):
+    for name in ('check', 'contract', 'confirmation', 'runner', 'scan', 'scan_runner', 'packaged_adapter'):
         if before.get(name) != after.get(name):
             changes.append({'kind': name, 'name': name, 'change': 'modified'})
     return changes
@@ -1452,9 +1512,9 @@ def assess(root, c, t):
         add_gap('扫描覆盖: ' + gap, 'scan_coverage_gap', '核对任务覆盖块、专项与引用证据，补齐适用调查或明确未完成。')
     if scan['present']:
         materials['harness-scan'] = digest(scan['fingerprint'])
-    if t['schema_version'] == 2 and t.get('state') == 'completed' and not t.get('review_source'):
+    if t['schema_version'] in STRUCTURED_TASK_VERSIONS and t.get('state') == 'completed' and not t.get('review_source'):
         add_gap('已完成任务缺审阅材料', 'review_source_missing', '核对实际差异与语义审阅，记录真实审阅材料后重新核对交付。')
-    if t['schema_version'] == 2 and t.get('review_source'):
+    if t['schema_version'] in STRUCTURED_TASK_VERSIONS and t.get('review_source'):
         review_code = 'review_material_changed'
         try:
             require(material_digest(root, t['review_source'], t['id'], t.get('review_kind', 'file')) == t.get('review_sha256'), '审阅材料已改变，需重新审阅并完成')
@@ -1506,7 +1566,7 @@ def assess(root, c, t):
                         'damaged_run_recheck', f'核对现场及最后一次损坏处置后，在当前授权与环境内重新verify {t["id"]} {cid}。',
                         'check', cid, [str(dispositions.relative_to(root))])
     global_gaps = list(gaps)
-    check_results, acceptance_results = {}, []
+    check_results, acceptance_results, reviewed_checks = {}, [], {}
     for ac in t['acceptance']:
         for cid in ac['checks']:
             if cid in selected:
@@ -1520,11 +1580,28 @@ def assess(root, c, t):
                 selected[cid] = rec['run_id']
                 detail, gap = assess_check(root, c, t, cid, directory, rec)
             check_results[cid] = detail
-            if gap: gaps.append(f'{cid}: {gap}')
+            if gap:
+                gaps.append(f'{cid}: {gap}')
+            else:
+                reviewed_checks[cid] = digest(rec['inputs'])
         human_status, human_diagnostics = 'not_required', []
+        artifacts = {}
+        artifact_error = None
+        if 'artifact_paths' in ac:
+            try:
+                artifacts = artifact_snapshot(root, c, t['id'], ac['artifact_paths'])
+            except (HarnessError, OSError) as exc:
+                artifact_error = str(exc)
+        artifact_fingerprint = digest(artifacts) if artifacts else None
         if ac.get('human_required'):
             h = t.get('human_acceptance', {}).get(ac['id'], {})
-            if h.get('status') != 'accepted' or not h.get('source') or h.get('contract') != digest(contract(t)):
+            binding_gap = None
+            if artifact_error:
+                binding_gap = ('human_artifact_unavailable', artifact_error)
+            elif artifact_fingerprint and h.get('artifact_fingerprint') != artifact_fingerprint:
+                binding_gap = ('human_artifact_changed' if h.get('artifact_fingerprint') else 'human_artifact_unconfirmed',
+                               '当前验收产物缺少对应确认或已改变')
+            if h.get('status') != 'accepted' or not h.get('source') or h.get('contract') != digest(contract(t)) or binding_gap:
                 human_status = 'pending'
                 reasons = []
                 def human_gap(code, message, action):
@@ -1542,36 +1619,56 @@ def assess(root, c, t):
                 elif h.get('contract') != digest(contract(t)):
                     human_gap('human_scope_changed', 'contract 与当前任务标准不匹配；先核对原确认是否适用，必要时重新确认，不直接替换指纹',
                               '核对原确认与范围变化；必要时向负责人重新确认，再更新记录，不直接替换指纹。')
+                if binding_gap:
+                    code, message = binding_gap
+                    human_gap(code, message, '核对并展示实际产物快照，取得针对该快照的确认后记录原指纹。')
                 gaps.append(f'{ac["id"]}: 必需人工验收未确认、无来源或范围已改变；' + '；'.join(reasons))
             else:
                 human_status = 'recorded'
         met = not global_gaps and human_status != 'pending' and all(check_results[cid]['conditions_met'] for cid in ac['checks'])
         acceptance_results.append({'id': ac['id'], 'text': ac['text'], 'checks': ac['checks'],
                                    'human_status': human_status, 'conditions_met': met, 'diagnostics': human_diagnostics})
+        if 'artifact_paths' in ac:
+            acceptance_results[-1].update(artifact_files=artifacts, artifact_fingerprint=artifact_fingerprint)
+    review_inputs = None
+    if len(reviewed_checks) == len(selected):
+        review_inputs = digest({'checks': reviewed_checks, 'artifacts': {
+            item['id']: item['artifact_fingerprint'] for item in acceptance_results if 'artifact_fingerprint' in item}})
+        previous = t.get('review_inputs_sha256')
+        if previous and review_inputs != previous:
+            add_gap('受审输入已改变，须重新核对实际差异并更新审阅材料', 'review_inputs_changed',
+                    '重新审阅当前对象并更新材料，随后运行 close --complete。')
+            global_gaps.append(gaps[-1])
+            for item in acceptance_results:
+                item['conditions_met'] = False
     return {'task_id': t['id'], 'time': now(), 'conditions_met': not gaps, 'gaps': gaps, 'runs': selected,
             'global_gaps': global_gaps, 'global_diagnostics': global_diagnostics,
             'action_diagnostics': action_diagnostics(root, t['id']),
             'check_results': check_results, 'acceptance_results': acceptance_results,
             'record_fingerprint': digest({'task': {k:v for k,v in t.items() if k not in ('state','updated_at','next_action','next_reason')}, 'materials': materials, 'reconciliations': reconciliations}),
-            'coverage': 'v2' if t['schema_version'] == 2 else 'legacy',
+            'coverage': f'v{t["schema_version"]}' if t['schema_version'] in STRUCTURED_TASK_VERSIONS else 'legacy',
+            'review_inputs_sha256': review_inputs,
             'contract': digest(contract(t)), 'boundary': '机械条件检查；不证明人工来源真实性、需求语义正确或平台强制阻断。'}
 
 def close(root, c, tid, complete=False, review_source=None):
     with lock(root):
         t, body = read_task(root, tid)
         assessed = dict(t)
-        if complete and t['schema_version'] == 2:
-            for key in ('review_source','review_sha256','review_kind','review_record_sha256'):
+        if complete and t['schema_version'] in STRUCTURED_TASK_VERSIONS:
+            for key in ('review_source','review_sha256','review_kind','review_record_sha256','review_inputs_sha256'):
                 assessed.pop(key, None)
             assessed['state'] = 'in_progress'
         result = assess(root, c, assessed)
         if complete:
             try:
                 nonempty(review_source, '真实差异及语义审阅来源')
-                if t['schema_version'] == 2:
+                if t['schema_version'] in STRUCTURED_TASK_VERSIONS:
                     require(safe(root, review_source).resolve() != safe(root, c['authorities']['status']).resolve(), '状态摘要不能作为审阅材料；请引用任务正文或独立审阅文件')
                     review_kind = source_kind(root, review_source, tid)
                     result['review_sha256'] = material_digest(root, review_source, tid, review_kind)
+                    if result['conditions_met'] and t.get('review_inputs_sha256') not in (None, result['review_inputs_sha256']):
+                        require(result['review_sha256'] != t.get('review_sha256'),
+                                '受审输入已改变；重新审阅当前对象并更新审阅材料')
             except HarnessError as exc:
                 raise HarnessError(f'{exc}；--review-source 须为项目内已有的非空审阅文件路径，可引用任务正文；不能直接填写会话原话') from exc
             if not result['conditions_met']:
@@ -1583,9 +1680,10 @@ def close(root, c, tid, complete=False, review_source=None):
                 t['state'] = 'completed'
                 t['next_action'] = '当前工程任务已完成；后续工作按新授权建立任务。'
                 t['review_source'] = review_source
-                if t['schema_version'] == 2:
+                if t['schema_version'] in STRUCTURED_TASK_VERSIONS:
                     t.update(review_sha256=result['review_sha256'], review_kind=review_kind,
-                             review_record_sha256=digest(review_record(t)))
+                             review_record_sha256=digest(review_record(t)),
+                             review_inputs_sha256=result['review_inputs_sha256'])
             try:
                 write_task(root, c, t, body)
             except TaskCommittedError as exc:
@@ -1606,7 +1704,7 @@ def resume(root, c, tid, activate=False):
     with lock(root):
         t, body = read_task(root, tid)
         if activate:
-            require(t['schema_version'] == 2, '旧任务继续执行前须 migrate-task')
+            require(t['schema_version'] in STRUCTURED_TASK_VERSIONS, '旧任务继续执行前须 migrate-task')
             require(t['state'] != 'cancelled', '已取消任务需新建有明确授权的任务')
             if t['state'] == 'completed':
                 t['next_action'] = '核对恢复原因、现行任务范围和证据，继续当前授权内尚未完成的工作。'
@@ -1662,7 +1760,7 @@ def readable_resume(result):
     lines = [f'任务：{t["id"]}', f'目标：{t["goal"]}', f'范围：{t["scope"]}',
              f'任务执行状态：{TASK_STATE_LABELS.get(t["state"], t["state"])}',
              f'下一动作：{t["next_action"]}', f'任务记录：{result["task_record"]}']
-    if t['schema_version'] == 2:
+    if t['schema_version'] in STRUCTURED_TASK_VERSIONS:
         outcome = result['summary']['user_outcome']
         if outcome != t['goal']:
             lines.append(f'用户结果：{outcome or "未填写"}')
@@ -1721,7 +1819,7 @@ def main(argv=None):
             elif a.command == 'begin': result = begin(root, c, spec)
             elif a.command == 'migrate-task': result = migrate_task(root, c, a.task, a.apply)
             elif a.command == 'update': result = update_task(root, c, a.task, load(Path(a.spec)))
-            elif a.command == 'verify': result = verify(root, c, a.task, a.check)
+            elif a.command == 'verify': result = verify(root, None, a.task, a.check)
             elif a.command == 'run-after':
                 result = run_after(root, c, a.task, a.check, a.argv, a.timeout)
             elif a.command == 'close': result = close(root, c, a.task, a.complete, a.review_source)
@@ -1732,7 +1830,7 @@ def main(argv=None):
                 nonempty(a.next, '下一动作')
                 with lock(root):
                     t, body = read_task(root, a.task)
-                    require(t['schema_version'] == 2, '旧任务继续执行前须 migrate-task')
+                    require(t['schema_version'] in STRUCTURED_TASK_VERSIONS, '旧任务继续执行前须 migrate-task')
                     require(t['state'] not in ('completed', 'cancelled'), '已结束任务不能暂停')
                     t['state'], t['next_action'] = 'interrupted', a.next
                     write_task(root, c, t, body)

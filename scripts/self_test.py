@@ -26,7 +26,7 @@ class MechanismTests(unittest.TestCase):
         (self.root/'README.md').write_text('\n'.join(f'[{p}]({p})' for p in ('AGENTS.md', 'TESTING.md', 'requirements.md', 'status.md')))
         (self.root/'input.txt').write_text('initial')
         self.check_code = ('import os,json\nfrom pathlib import Path\n'
-                           'assert Path("input.txt").read_text()\n'
+                           'if not Path("input.txt").read_text(): raise ValueError("empty fixture input")\n'
                            'Path(os.environ["AI_PROJECT_HARNESS_REPORT"]).write_text(json.dumps(dict(total=1,failed=0,errors=0,skipped=0)))\n')
         (self.root/'check.py').write_text(self.check_code)
         self.mapping = {'authorities':{'entrypoint':'README.md', 'agent_policy':'AGENTS.md', 'requirements':'requirements.md', 'validation':'TESTING.md', 'status':'status.md'},

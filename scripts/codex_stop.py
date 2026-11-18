@@ -16,7 +16,7 @@ def binding_path(root, session):
 
 def bind(root, session, task):
     t, _ = h.read_task(root, task)
-    h.require(t['schema_version'] == 2, '先迁移任务')
+    h.require(t['schema_version'] in h.STRUCTURED_TASK_VERSIONS, '先迁移任务')
     with h.lock(root):
         p = binding_path(root, session)
         if p.exists():

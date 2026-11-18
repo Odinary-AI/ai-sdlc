@@ -43,7 +43,7 @@ Git hook只调用同一gate入口。启用前检查已有hooksPath并合并，�
 
 ## 可选条件衔接
 
-`run-after`是1.4.0起的可选组合入口，不是任务完成判定或统一交付门。`--check ID`可重复，必须非空、不重复且属于当前进行中v2任务的验收范围；未知ID、缺输入或坏配置明确失败，不回退到全部检查或空范围。可选择本次依赖所需的子集，任务close仍核对全部必需验收。检查命令、inputs、rule_sections、optional_tests及判据沿现有配置，不增加统一套件。检查充分性、例外理由和授权真实性由AI/人核对，不能失败后换范围来放行同一义务。
+`run-after`是1.4.0起的可选组合入口，不是任务完成判定或统一交付门。`--check ID`可重复，必须非空、不重复且属于当前进行中的 v2/v3 任务的验收范围；未知ID、缺输入或坏配置明确失败，不回退到全部检查或空范围。可选择本次依赖所需的子集，任务close仍核对全部必需验收。检查命令、inputs、rule_sections、optional_tests及判据沿现有配置，不增加统一套件。检查充分性、例外理由和授权真实性由AI/人核对，不能失败后换范围来放行同一义务。
 
 ```sh
 python3 H --root PROJECT run-after TASK-001 --check unit --check source-format --timeout 60 --action git commit -m '已授权的本地修改'
@@ -63,7 +63,7 @@ RUN封存、评估及ACTION封存对完整output.log按块计算SHA-256；散列
 
 ## 扫描覆盖记录
 
-脚本模式的新正式健康扫描在对应TASK正文保留唯一 `harness-scan` JSON块，独立 `schema_version=1`；任务仍使用v2，无需迁移普通或历史任务。完整调查内容可引用附件，不重复覆盖表。格式只记录结果，不规定工具、实现方法和调查顺序。
+脚本模式的新正式健康扫描在对应TASK正文保留唯一 `harness-scan` JSON块，扫描块独立使用 `schema_version=1`，可用于 v2 或已启用产物绑定的 v3 任务，无需迁移历史任务。完整调查内容可引用附件，不重复覆盖表。格式只记录结果，不规定工具、实现方法和调查顺序。
 
 | 字段 | 内容 |
 |---|---|
@@ -114,7 +114,7 @@ resume、close及Stop的共同assess会检查存在的覆盖块；缺条目、�
 
 接入映射及其中的authorities须为JSON对象。首次接入未填写的职责使用默认路径；重复接入只比较明确填写的职责，省略的职责保留已有映射。其他明确填写字段仍与已有配置比较，真实差异拒绝自动覆盖；预览及--apply遵循同一规则。可在首次映射中提供 check_suggestions，按下文检查建议数组的字段约定校验并保存；省略时沿用已有配置。首次映射遇到未支持的顶层字段或与执行器不符的版本字段，会在写入前指出差异。
 
-status不能与requirements、validation或agent_policy映射到同一实际文件（包含规范化路径、符号链接及现有文件的其他别名），接入预览及写入前均拒绝并指出冲突职责；状态写回会改变这些规则文件的整文件指纹。现有文件按实际身份判断，大小写敏感文件系统上的不同文件可分别映射；未建立的路径若仅大小写不同，先建立并核对实际文件后再映射，预览不写探针文件来猜测。沿用分文件映射，不自动拆分已有文件。status仅与entrypoint共文件不受此限制，但所选检查inputs不得包含状态文件、其符号/硬链接别名或包含这些文件的目录；doctor报告具体输入及状态路径并标未就绪，begin及共同assess拒绝依赖该配置完成。未选择的检查不阻塞当前任务；不静默排除真实输入，需分离状态或调整来源后重新验证。有任务上下文时，begin、verify 和共同评估还检查所选 inputs 与该任务写入位置的关系。当前任务文件、它的符号或硬链接，以及将包含任务文件或本次新回执的目录（含嵌套目录链接）会阻塞。若原子写回会将所选别名留在旧任务内容上，先分离输入，再重试写入。已有的其他任务文件或固定历史回执可作输入；诊断后分离真实输入，再取得有效证据。职责载体必须为非空文件；这些文件中的普通本地导航可以指向存在的文件或目录，缺失目标仍报错。
+status 不可占用执行器内部配置、锁、回执等存储。status不能与requirements、validation或agent_policy映射到同一实际文件（包含规范化路径、符号链接及现有文件的其他别名），接入预览及写入前均拒绝并指出冲突职责；状态写回会改变这些规则文件的整文件指纹。现有文件按实际身份判断，大小写敏感文件系统上的不同文件可分别映射；未建立的路径若仅大小写不同，先建立并核对实际文件后再映射，预览不写探针文件来猜测。沿用分文件映射，不自动拆分已有文件。status仅与entrypoint共文件不受此限制，但所选检查inputs不得包含状态文件、其符号/硬链接别名或包含这些文件的目录；doctor报告具体输入及状态路径并标未就绪，begin及共同assess拒绝依赖该配置完成。未选择的检查不阻塞当前任务；不静默排除真实输入，需分离状态或调整来源后重新验证。有任务上下文时，begin、verify 和共同评估还检查所选 inputs 与该任务写入位置的关系。当前任务文件、它的符号或硬链接，以及将包含任务文件、当前任务的新 RUN 或新完成回执的目录（含嵌套目录链接）会阻塞。若原子写回会将所选别名留在旧任务内容上，先分离输入，再重试写入。已有的其他任务文件或固定历史回执可作输入；诊断后分离真实输入，再取得有效证据。职责载体必须为非空文件；这些文件中的普通本地导航可以指向存在的文件或目录，缺失目标仍报错。
 
 导航检查识别普通Markdown行内链接、尖括号目标、可选标题，以及单行定义的完整/折叠/快捷引用式链接；本地路径按URI路径解码一次，片段不作为文件名。代码围栏、缩进代码、行内代码及HTML注释中的示例不作导航或缺失链接；图片检查本地资源存在性，但不能代替职责导航。外部URI不抓取，文件内标题锚点不验证。不提供完整Markdown渲染、原始HTML导航或框架路由检查；这些入口仍须由项目相应检查支持，不把文本示例当真实入口。
 
@@ -170,7 +170,7 @@ verify向检查进程注入`AI_PROJECT_HARNESS_OPTIONAL_TESTS`，值为当前检
 }
 ```
 
-begin 后唯一状态在 Markdown 的 `harness-task` 块。新任务使用 v2，并建立下述默认字段；未审阅状态不能通过 close。模板 records/task.md 的职责由同一数据块承载，正文仅补事实说明，不重复状态。脚本不会自动迁移非结构化历史。
+begin 后唯一状态在 Markdown 的 `harness-task` 块。新任务默认使用 v2，显式产物绑定使用 v3。两者均建立下述默认字段；未审阅状态不能通过 close。模板 records/task.md 的职责由同一数据块承载，正文仅补事实说明，不重复状态。脚本不会自动迁移非结构化历史。
 
 ### 任务状态支持范围
 
@@ -179,7 +179,7 @@ begin 后唯一状态在 Markdown 的 `harness-task` 块。新任务使用 v2，
 | 任务状态 | 当前命令支持 |
 |---|---|
 | 进行中 `in_progress` | begin创建；核对现场后resume --activate继续 |
-| 已中断 `interrupted` | pause保存中断及下一动作；不停止外部操作 |
+| 已中断 `interrupted` | pause保存中断及下一动作；已登记的检查可继续，未登记的检查在锁内复核状态后拒绝启动 |
 | 阻塞 `blocked` | close --complete发现交付条件缺口时写入；普通close不改任务状态 |
 | 已完成 `completed` | close --complete在条件及审阅材料满足时写入 |
 | 未开始 `not_started`、已取消 `cancelled` | 可供文档模式记录或历史任务读取/展示；当前没有转入这些状态的命令，update也不能修改state。已取消任务不能通过resume --activate继续 |
@@ -196,7 +196,7 @@ verify用于前台检查：父进程退出不足以证明整组结束。正常�
 
 ## unittest 计数适配器
 
-标准 unittest 项目可复用本包 `scripts/unittest_report.py`。在项目检查的 argv 中配置 `["python3", "该适配器的实际路径", "--start", "tests", "--pattern", "test_*.py"]`，kind 为 tests。适配器从当前项目目录发现并真实运行测试，保存计数；沿用框架的成功判定，预期失败用例的意外成功（unexpected success）计入 failed，零测试、全跳过及未预先列为可选的跳过非通过。有跳过时报告附真实skipped_tests；可选范围及执行器注入环境见上节。可在授权内将适配器复制到项目 scripts 并把它加入 inputs，便于脱离 Skill 安装目录继续运行。
+标准 unittest 项目可复用本包 `scripts/unittest_report.py`。在项目检查的 argv 中配置 `["python3", "该适配器的实际路径", "--start", "tests", "--pattern", "test_*.py"]`，kind 为 tests。适配器从当前项目目录发现并真实运行测试，保存计数；沿用框架的成功判定，预期失败用例的意外成功（unexpected success）计入 failed，零测试、全跳过及未预先列为可选的跳过非通过。有跳过时报告附真实skipped_tests；可选范围及执行器注入环境见上节。同一执行器包内的适配器以项目外绝对脚本路径直接调用时，其内容纳入证据指纹。其他副本可复制到项目 scripts 并加入 inputs，独立或间接依赖按实际映射核对。
 
 输出位置依次取环境变量 `AI_PROJECT_HARNESS_REPORT`、`--report`，均未指定时在当前目录的 `.harness/reports/` 下生成唯一文件名。指定路径已有文件会被替换；仅将固定可再生产物用于重复输出，保留历史证据时使用新路径。verify 为每次执行注入独立 RUN 内的报告路径，优先于 `--report`。
 
@@ -246,6 +246,8 @@ JSON 和文本复用同一次评估；默认仍输出 JSON，返回码与既有�
 
 ## v2任务处置与更新
 
+以下操作也适用于启用产物绑定的 v3 任务。
+
 purpose.user_outcome 未提供时复用 goal；显式空白或坏值仍是草稿缺口。purpose.stage_ref 有关联时引用项目内文件，无阶段可省略；stage_reason、next_reason 仅在需要额外解释时补充。document_sync 默认 reviewed=false。AI 每次形成决定、修改后反查与交付前主动维护，不要求用户逐项提醒。
 
 最小无文档影响处置（用户结果沿用 goal，下一动作已能说明目的）：
@@ -257,11 +259,13 @@ purpose.user_outcome 未提供时复用 goal；显式空白或坏值仍是草稿
 这只是字段片段；完整更新步骤见下方[任务快照更新](#任务快照更新)。`begin/update` 在写入前汇总 decisions 与 document_sync.items 已填写条目的结构错误并给出字段路径；待处置的合法草稿仍可保存，完成条件由 close 核对。resume/close 对 changes、followups、human_items 和 risk_routes 逐项检查必需字段的类型与内容，缺口标出数组下标和字段；一项错误不遮住其他条目。历史记录通过同一入口报缺口，不因本次修复自动改写。人工确认只能按真实来源维护。
 
 - decisions：每项 id、kind（confirmed/authorized/candidate/rejected/observation）、source、summary、rule_ref。kind是事项分类，依次表示人已确认、开发AI授权内决定、候选、拒绝和观察事实。已确认或授权内改变规则且有 rule_ref 时，关联同步处置；候选不能当正式依据。
-- document_sync：reviewed、no_change_reason、items。items 每项 id、decision_ids数组、path、status（pending/updated/not_needed）、reason。updated 需文件存在且非空；not_needed 需理由；pending 阻止完成。
+- document_sync：reviewed、no_change_reason、items。items 每项 id、decision_ids数组、path、status（pending/updated/not_needed）、reason。updated 需文件存在且非空，支持二进制文档，不强制按文本解码；not_needed 需理由；pending 阻止完成。
 - changes：每项 path 为非空项目相对路径、summary 为非空文字；删除文件可记录路径，语义审阅核对实际差异。
 - followups：每项 id、summary、owner、trigger、source 均为非空文字。不能转移本次必需验收规避完成要求。
 - human_items：每项 id、question、recommendation 为非空文字，materials 为非空的项目内路径数组，acceptance_id 为已知验收 ID 或 null。需要人判断与人已确认分开。
 - risk_routes：每项 kind 为 experiment/recovery/side_effect/incident，applicable 为布尔值，reason 为非空文字；适用时 record_ref 需指向项目内非空文件。不适用时可省略 record_ref。风险本身的结果要求加入验收检查。
+
+任务处置材料共用文件校验与内容散列。引用当前任务文件时只散列去掉harness-task块后的正文；任务实质字段另由record_fingerprint和受审记录校验覆盖，状态、更新时间、下一动作及原因不经材料自引用重新纳入。独立材料仍整文件绑定；正文、实质任务字段或独立材料变化仍需重核。旧回执保持，执行器变化沿原证据失效规则处理。
 
 只有需要独立维护长期决定时才建立决策记录：candidate可对应其proposed状态；confirmed或authorized可在来源与范围成立时支持accepted；rejected保留实际拒绝依据；observation继续作为事实材料，不能自动转为已确认决定。决策后续被取代或停用按原记录的superseded/deprecated维护，不能从kind推断生命周期，也不将旧任务的当时分类批量改写。独立记录与任务互相引用，不复制同一决定正文。
 
@@ -270,6 +274,14 @@ purpose.user_outcome 未提供时复用 goal；显式空白或坏值仍是草稿
 close --complete 的 review-source 在v2必须为项目内非空审阅材料，可引用当前任务文件。新记录的 review_kind=file 散列独立文件，task_body 散列当前任务去掉唯一 harness-task 块后的正文；review_record_sha256 另核对受审任务信息，排除状态、时间、下一动作及审阅管理字段。状态派生文件不能作审阅材料。正文、独立材料或受审记录改变后重新审阅并完成；旧记录无新字段时仍沿用原文件散列。reviewed/文件存在只证明处置可检查，不证明内容正确。下一动作或其原因变化不改变执行标准或受审记录；相关规则、源码和检查配置变化仍使旧证据失效。
 
 `python3 H --root PROJECT migrate-task TASK` 预览旧v1任务；加 --apply 保存原件及散列再升级。未知版本拒绝；v1可只读resume及legacy close，继续verify/activate/pause前需迁移。旧RUN不修改，升级后的当前证据重新核对。TASK源JSON仅为创建历史，别当作当前状态。
+
+### 可选产物验收绑定
+
+新任务规格设置 `"schema_version": 3`，对需要绑定的 `human_required: true` 验收项设置 `"artifact_paths": ["dist/report.pdf"]`。至少一个验收项启用绑定。路径为有限、显式的项目内文件清单，缺失、越界、重复文件别名或当前任务的状态输出会阻止确认。旧任务继续按原协议读取，旧执行器拒绝 v3。
+
+将 `resume` 返回的 `assessment.acceptance_results` 中该项的 `artifact_files`（路径和 SHA-256）及 `artifact_fingerprint` 与实际交付物一起呈现。只在取得对该快照的真实确认后，将展示时的 `artifact_fingerprint` 连同其真实来源、`status: accepted` 和原任务标准 `contract` 记入该项 `human_acceptance`。产物或清单变化后需复核，不能将原确认补签至新对象。未映射文件变化不改变产物指纹。
+
+从本版起，`close --complete` 记录所选通过检查的输入身份和已映射产物快照。同输入重跑保持审阅有效。已绑定对象改变后，更新审阅材料并重新完成；仅重跑测试不能代替审阅。旧任务的历史完成记录保留，首次用新版完成时建立审阅绑定。
 
 ### 任务快照更新
 
@@ -390,7 +402,7 @@ kind还支持collaboration/workflow/dataflow/lifecycle。可选node.position={co
 
 ## 只读收口核对
 
-`closeout.py`供两种模式在[最终收口](maintenance.md#收口的机械核对与语义核对)调用；不修改项目、不运行验收命令、不创建完成回执。已有等效检查可复用，不能仅因新增工具强制迁移文档格式。
+`closeout.py`供两种模式在[最终收口](maintenance.md#收口的机械核对与语义核对)调用；不修改项目、不运行验收命令、不创建完成回执。已有等效检查可复用，不能仅因新增工具强制迁移文档格式。文档模式可按maintenance保留有证据的人工核对；选择此工具时才需要Python运行环境，人工结果不标机械通过。
 
 ```sh
 # 文档模式：路径、前缀和标题均替换为本项目已有来源。
